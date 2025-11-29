@@ -245,8 +245,9 @@ async function initializeExtension(): Promise<void> {
         // Initialize YAML storage
         await yamlStorage.initialize();
         
-        // Scan for anchors
-        await anchorIndexer.scanWorkspace();
+        // Load discussions first, then scan only referenced files for anchors
+        const discussions = await yamlStorage.loadAllDiscussions();
+        await anchorIndexer.scanWorkspace(discussions);
         
         // Refresh tree view
         await treeDataProvider.refresh();

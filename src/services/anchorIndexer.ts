@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { AnchorLocation, COMMENT_PREFIXES } from '../models/discussion';
+import { AnchorLocation, Discussion } from '../models/discussion';
 import { SidecarRepoService } from './sidecarRepoService';
 
 // Regex pattern to find discussion anchors
@@ -43,9 +43,10 @@ export class AnchorIndexer {
     }
 
     /**
-     * Scan all workspace files for anchors
+     * Scan only files mentioned in discussions for anchors
+     * This is more efficient than scanning all workspace files
      */
-    async scanWorkspace(): Promise<void> {
+    async scanWorkspace(discussions?: Discussion[]): Promise<void> {
         this.anchors.clear();
 
         const codeRepoPath = this.sidecarService.codeRepoPath;
@@ -53,21 +54,25 @@ export class AnchorIndexer {
             return;
         }
 
-        // Get supported languages from config
-        const config = vscode.workspace.getConfiguration('longLivedDiscussions');
-        const supportedLanguages = config.get<string[]>('supportedLanguages', [
-            'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
-            'csharp', 'java', 'python', 'go', 'rust', 'c', 'cpp', 'shellscript', 'ruby', 'php'
-        ]);
+        if (!discussions || discussions.length === 0) {
+            this._onAnchorsChanged.fire();
+            return;
+        }
 
-        // Build file patterns from supported languages
-        const patterns = this.buildFilePatterns(supportedLanguages);
-        
-        for (const pattern of patterns) {
-            const files = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
-            for (const file of files) {
-                await this.scanFile(file);
+        // Extract unique file paths from discussions
+        const filePaths = new Set<string>();
+        for (const discussion of discussions) {
+            if (discussion.anchor?.file_path) {
+                // Convert relative path to absolute path
+                const absolutePath = path.join(codeRepoPath, discussion.anchor.file_path);
+                filePaths.add(absolutePath);
             }
+        }
+
+        // Scan only the files mentioned in discussions
+        for (const filePath of filePaths) {
+            const uri = vscode.Uri.file(filePath);
+            await this.scanFile(uri);
         }
 
         this._onAnchorsChanged.fire();
@@ -131,47 +136,7 @@ export class AnchorIndexer {
         }
     }
 
-    /**
-     * Build glob patterns from language IDs
-     */
-    private buildFilePatterns(languageIds: string[]): string[] {
-        const patterns: string[] = [];
-        const extensionMap: Record<string, string[]> = {
-            'typescript': ['ts'],
-            'typescriptreact': ['tsx'],
-            'javascript': ['js', 'mjs', 'cjs'],
-            'javascriptreact': ['jsx'],
-            'csharp': ['cs'],
-            'java': ['java'],
-            'python': ['py'],
-            'go': ['go'],
-            'rust': ['rs'],
-            'c': ['c', 'h'],
-            'cpp': ['cpp', 'cc', 'cxx', 'hpp', 'hh', 'hxx'],
-            'shellscript': ['sh', 'bash', 'zsh'],
-            'ruby': ['rb'],
-            'php': ['php'],
-            'haskell': ['hs'],
-            'lua': ['lua'],
-            'sql': ['sql'],
-            'yaml': ['yml', 'yaml'],
-            'html': ['html', 'htm'],
-            'css': ['css'],
-            'scss': ['scss'],
-            'less': ['less'],
-        };
 
-        for (const langId of languageIds) {
-            const extensions = extensionMap[langId];
-            if (extensions) {
-                for (const ext of extensions) {
-                    patterns.push(`**/*.${ext}`);
-                }
-            }
-        }
-
-        return [...new Set(patterns)]; // Remove duplicates
-    }
 
     /**
      * Find anchor location in a document by discussion ID

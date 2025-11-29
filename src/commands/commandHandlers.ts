@@ -126,8 +126,9 @@ export class CommandHandlers {
                 `${anchor.file_path}:${startLine}`
             );
 
-            // Refresh
-            await this.anchorIndexer.scanWorkspace();
+            // Refresh - scan only files mentioned in discussions
+            const discussions = await this.yamlStorage.loadAllDiscussions();
+            await this.anchorIndexer.scanWorkspace(discussions);
             await this.treeDataProvider.refresh();
 
             vscode.window.showInformationMessage(`Discussion created: ${discussionId}`);
@@ -327,8 +328,9 @@ export class CommandHandlers {
                 vscode.window.showInformationMessage(`Discussion ${discussion.id} closed (no anchor to remove).`);
             }
 
-            // Refresh
-            await this.anchorIndexer.scanWorkspace();
+            // Refresh - scan only files mentioned in discussions
+            const discussions = await this.yamlStorage.loadAllDiscussions();
+            await this.anchorIndexer.scanWorkspace(discussions);
             await this.treeDataProvider.refresh();
 
         } catch (error) {
@@ -407,7 +409,8 @@ export class CommandHandlers {
      * Refresh discussions
      */
     async refresh(): Promise<void> {
-        await this.anchorIndexer.scanWorkspace();
+        const discussions = await this.yamlStorage.loadAllDiscussions();
+        await this.anchorIndexer.scanWorkspace(discussions);
         await this.treeDataProvider.refresh();
     }
 
