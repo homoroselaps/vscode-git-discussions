@@ -1,0 +1,237 @@
+{
+  "name": "long-lived-discussions",
+  "displayName": "Long-Lived Git Discussions",
+  "description": "Anchor long-lived discussions to code and store them in a separate sidecar Git repository",
+  "version": "0.1.0",
+  "publisher": "jtm",
+  "engines": {
+    "vscode": "^1.106.1"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "longLivedDiscussions",
+          "title": "Discussions",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "longLivedDiscussions": [
+        {
+          "id": "longLivedDiscussionsView",
+          "name": "Discussions"
+        },
+        {
+          "id": "longLivedDiscussionsChat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "longLivedDiscussionsView",
+        "contents": "No discussions repository connected.\n\nCreate a sibling folder named `<your-repo>.discuss` or configure `longLivedDiscussions.discussionRepoPath` in settings.\n\n[Open Settings](command:workbench.action.openSettings?%22longLivedDiscussions%22)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "longLivedDiscussions.createDiscussion",
+        "title": "Create Discussion for Selection",
+        "category": "Discussions",
+        "icon": "$(add)"
+      },
+      {
+        "command": "longLivedDiscussions.addComment",
+        "title": "Add Comment to Discussion",
+        "category": "Discussions",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "longLivedDiscussions.closeDiscussion",
+        "title": "Close Discussion",
+        "category": "Discussions",
+        "icon": "$(check)"
+      },
+      {
+        "command": "longLivedDiscussions.closeAndRemoveAnchor",
+        "title": "Close Discussion and Remove Anchor",
+        "category": "Discussions",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "longLivedDiscussions.openDiscussion",
+        "title": "Open Discussion",
+        "category": "Discussions"
+      },
+      {
+        "command": "longLivedDiscussions.goToAnchor",
+        "title": "Go to Anchor in Code",
+        "category": "Discussions",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "longLivedDiscussions.openYamlFile",
+        "title": "Open Discussion YAML File",
+        "category": "Discussions",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "longLivedDiscussions.refresh",
+        "title": "Refresh Discussions",
+        "category": "Discussions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "longLivedDiscussions.sync",
+        "title": "Sync Discussions with Remote",
+        "category": "Discussions",
+        "icon": "$(sync)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "longLivedDiscussions.sync",
+          "when": "view == longLivedDiscussionsView",
+          "group": "navigation"
+        },
+        {
+          "command": "longLivedDiscussions.refresh",
+          "when": "view == longLivedDiscussionsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "longLivedDiscussions.addComment",
+          "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "inline"
+        },
+        {
+          "command": "longLivedDiscussions.goToAnchor",
+          "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "inline"
+        },
+        {
+          "command": "longLivedDiscussions.closeDiscussion",
+          "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "1_actions"
+        },
+        {
+          "command": "longLivedDiscussions.closeAndRemoveAnchor",
+          "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "1_actions"
+        },
+        {
+          "command": "longLivedDiscussions.openYamlFile",
+          "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "2_open"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "longLivedDiscussions.createDiscussion",
+          "group": "discussions"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "longLivedDiscussions.createDiscussion",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "Long-Lived Discussions",
+      "properties": {
+        "longLivedDiscussions.discussionRepoPath": {
+          "type": "string",
+          "default": "",
+          "description": "Explicit path to the discussions Git repository. If empty, uses sibling folder '<repoName>.discuss'."
+        },
+        "longLivedDiscussions.autoCommitDiscussionRepo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically commit changes to the discussions repository."
+        },
+        "longLivedDiscussions.autoPush": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically push changes to the remote discussions repository after each commit."
+        },
+        "longLivedDiscussions.autoFetch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically fetch and pull changes from the remote discussions repository."
+        },
+        "longLivedDiscussions.syncIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "How often to check for new discussions from remote (in minutes). Set to 0 to disable periodic sync."
+        },
+        "longLivedDiscussions.supportedLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "typescript",
+            "javascript",
+            "typescriptreact",
+            "javascriptreact",
+            "csharp",
+            "java",
+            "python",
+            "go",
+            "rust",
+            "c",
+            "cpp",
+            "shellscript",
+            "ruby",
+            "php"
+          ],
+          "description": "Languages where discussion anchors are detected and inserted."
+        },
+        "longLivedDiscussions.anchorPattern": {
+          "type": "string",
+          "default": "[discussion:${id}]",
+          "description": "Pattern for discussion anchors. Use ${id} as placeholder for the discussion ID."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/vscode": "^1.106.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.46.3",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}

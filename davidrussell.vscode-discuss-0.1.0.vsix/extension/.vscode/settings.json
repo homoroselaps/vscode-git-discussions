@@ -1,0 +1,78 @@
+{
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "editor.rulers": [100],
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+
+  // TypeScript settings
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "typescript.updateImportsOnFileMove.enabled": "always",
+
+  // ESLint settings
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+
+  // Prettier settings
+  "prettier.singleQuote": true,
+  "prettier.trailingComma": "es5",
+  "prettier.printWidth": 100,
+
+  // Files to exclude from search
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules": true,
+    "**/out": true,
+    "**/dist": true
+  },
+
+  // Search settings
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/out": true,
+    "**/dist": true,
+    "**/*.vsix": true
+  },
+
+  // File associations
+  "files.associations": {
+    "*.md": "markdown"
+  },
+
+  // Terminal settings
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+
+  // Testing
+  "testExplorer.useNativeTesting": true,
+  "vscode-test.config": "./.vscode-test.mjs",
+
+  // Debug settings
+  "debug.internalConsoleOptions": "neverOpen",
+  "debug.openDebug": "openOnDebugBreak",
+  "debug.showInStatusBar": "always",
+
+  // Extension development
+  "extensions.ignoreRecommendations": false,
+
+  // GitHub Copilot
+  "github.copilot.enable": {
+    "*": true,
+    "markdown": true,
+    "typescript": true
+  },
+
+  // Hide compiled output
+  "files.watcherExclude": {
+    "**/out/**": true,
+    "**/.vscode-test/**": true,
+    "**/node_modules/**": true
+  }
+}

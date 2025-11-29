@@ -1,0 +1,215 @@
+{
+  "name": "vscode-discuss",
+  "displayName": "VSCode Discuss - Code Discussions & Reviews",
+  "description": "Create threaded, location-anchored discussions on code. Perfect for async code reviews, architecture decisions, and team collaboration. Git-versioned discussions that live with your code.",
+  "version": "0.1.0",
+  "publisher": "DavidRussell",
+  "author": {
+    "name": "Dave Russell",
+    "email": "daverussellsa@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ApprenticeDave/VSCodeDiscuss.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ApprenticeDave/VSCodeDiscuss/issues"
+  },
+  "homepage": "https://github.com/ApprenticeDave/VSCodeDiscuss#readme",
+  "license": "MIT",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers",
+    "Notebooks"
+  ],
+  "keywords": [
+    "discussion",
+    "comments",
+    "collaboration",
+    "git",
+    "github",
+    "code-review",
+    "async",
+    "threaded",
+    "annotations",
+    "team",
+    "review",
+    "discussion-threads"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-discuss.createNote",
+        "title": "Create Discussion Note",
+        "category": "VSCode Discuss",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "vscode-discuss.showDiscussions",
+        "title": "Show Discussions",
+        "category": "VSCode Discuss",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "vscode-discuss.refreshDiscussions",
+        "title": "Refresh Discussions",
+        "category": "VSCode Discuss",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vscode-discuss.openDiscussion",
+        "title": "Open Discussion",
+        "category": "VSCode Discuss",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vscodeDiscuss",
+          "title": "VSCode Discuss",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "vscodeDiscuss": [
+        {
+          "type": "webview",
+          "id": "vscodeDiscuss.discussionsView",
+          "name": "Discussions"
+        },
+        {
+          "id": "vscodeDiscussDiscussions",
+          "name": "Discussions Tree",
+          "icon": "$(comment-discussion)",
+          "contextualTitle": "VSCode Discuss"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vscode-discuss.createNote",
+          "when": "editorHasSelection",
+          "group": "vscode-discuss@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "vscode-discuss.createNote",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "vscode-discuss.openDiscussion",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "vscode-discuss.refreshDiscussions",
+          "when": "view == vscodeDiscussDiscussions",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "vscode-discuss.openDiscussion",
+          "when": "view == vscodeDiscussDiscussions && viewItem == discussion",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "VSCode Discuss",
+      "properties": {
+        "vscodeDiscuss.storageLocation": {
+          "type": "string",
+          "default": ".vscode-discuss",
+          "description": "Directory where discussions are stored (relative to workspace root)"
+        },
+        "vscodeDiscuss.archiveAfterDays": {
+          "type": "number",
+          "default": 90,
+          "description": "Automatically archive resolved discussions after N days (0 to disable)"
+        },
+        "vscodeDiscuss.enableGitHubSync": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable synchronization with GitHub Discussions (requires authentication)"
+        },
+        "vscodeDiscuss.includedFilePatterns": {
+          "type": "array",
+          "default": [
+            "**/*"
+          ],
+          "description": "File patterns to include for discussions"
+        },
+        "vscodeDiscuss.excludedFilePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/out/**",
+            "**/.git/**"
+          ],
+          "description": "File patterns to exclude from discussions"
+        },
+        "vscodeDiscuss.autoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically save discussions when created or modified"
+        },
+        "vscodeDiscuss.git.autoCommit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically commit discussion changes to Git"
+        },
+        "vscodeDiscuss.git.commitMessageTemplate": {
+          "type": "string",
+          "default": "Update discussions: {action}",
+          "description": "Template for Git commit messages. {action} will be replaced with the action performed (created, updated, deleted)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "npm run compile && vscode-test",
+    "package": "npm run compile && vsce package --out dist/vscode-discuss-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^8.0.0",
+    "glob": "^10.4.5",
+    "mocha": "^10.8.2",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  }
+}
