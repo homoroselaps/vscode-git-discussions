@@ -45,6 +45,7 @@ const sidecarRepoService_js_1 = require("./services/sidecarRepoService.js");
 const gitService_js_1 = require("./services/gitService.js");
 const yamlStorageService_js_1 = require("./services/yamlStorageService.js");
 const anchorIndexer_js_1 = require("./services/anchorIndexer.js");
+const readMentionsStorage_js_1 = require("./services/readMentionsStorage.js");
 const discussionsTreeDataProvider_js_1 = require("./providers/discussionsTreeDataProvider.js");
 const discussionWebviewProvider_js_1 = require("./providers/discussionWebviewProvider.js");
 const commandHandlers_js_1 = require("./commands/commandHandlers.js");
@@ -53,6 +54,7 @@ let sidecarService;
 let gitService;
 let yamlStorage;
 let anchorIndexer;
+let readMentionsStorage;
 // Providers
 let treeDataProvider;
 let webviewProvider;
@@ -65,11 +67,12 @@ async function activate(context) {
     gitService = new gitService_js_1.GitService();
     yamlStorage = new yamlStorageService_js_1.YamlStorageService(sidecarService);
     anchorIndexer = new anchorIndexer_js_1.AnchorIndexer(sidecarService);
+    readMentionsStorage = new readMentionsStorage_js_1.ReadMentionsStorage();
     // Initialize providers
-    treeDataProvider = new discussionsTreeDataProvider_js_1.DiscussionsTreeDataProvider(yamlStorage, anchorIndexer, sidecarService);
-    webviewProvider = new discussionWebviewProvider_js_1.DiscussionWebviewProvider(context.extensionUri, yamlStorage, gitService, anchorIndexer, treeDataProvider);
+    treeDataProvider = new discussionsTreeDataProvider_js_1.DiscussionsTreeDataProvider(yamlStorage, anchorIndexer, sidecarService, gitService, readMentionsStorage);
+    webviewProvider = new discussionWebviewProvider_js_1.DiscussionWebviewProvider(context.extensionUri, yamlStorage, gitService, anchorIndexer, treeDataProvider, readMentionsStorage);
     // Initialize command handlers
-    commandHandlers = new commandHandlers_js_1.CommandHandlers(sidecarService, yamlStorage, anchorIndexer, gitService, treeDataProvider);
+    commandHandlers = new commandHandlers_js_1.CommandHandlers(sidecarService, yamlStorage, anchorIndexer, gitService, treeDataProvider, readMentionsStorage);
     // Register tree view
     const treeView = vscode.window.createTreeView('longLivedDiscussionsView', {
         treeDataProvider,
@@ -116,6 +119,9 @@ async function activate(context) {
         await commandHandlers.refresh();
         await webviewProvider.refresh();
         vscode.window.showInformationMessage('Discussions synced with remote.');
+    }), vscode.commands.registerCommand('longLivedDiscussions.markAllMentionsRead', async (item) => {
+        await commandHandlers.markAllMentionsRead(item?.discussion);
+        await webviewProvider.refresh();
     }));
     // Refresh views when sync brings new data from remote
     context.subscriptions.push(gitService.onDidSync(async () => {
@@ -123,7 +129,7 @@ async function activate(context) {
         await webviewProvider.refresh();
     }));
     // Register disposables
-    context.subscriptions.push(sidecarService, gitService, yamlStorage, anchorIndexer, treeDataProvider);
+    context.subscriptions.push(sidecarService, gitService, yamlStorage, anchorIndexer, readMentionsStorage, treeDataProvider);
     // Watch for file saves to re-scan anchors
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
         // Re-scan the saved file for anchors
@@ -152,6 +158,8 @@ async function initializeExtension() {
         gitService.initialize(status.codeRepoPath, status.discussionRepoPath);
         // Initialize YAML storage
         await yamlStorage.initialize();
+        // Initialize read mentions storage (stored in code repo's .vscode folder)
+        await readMentionsStorage.initialize(status.codeRepoPath);
         // Scan for anchors
         await anchorIndexer.scanWorkspace();
         // Refresh tree view

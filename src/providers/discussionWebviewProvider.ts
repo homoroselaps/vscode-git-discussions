@@ -3,17 +3,19 @@
  */
 
 import * as vscode from 'vscode';
-import { DiscussionWithAnchorStatus, Discussion } from '../models/discussion.js';
+import { DiscussionWithAnchorStatus, Discussion, hasMentionFor, generateCommentId } from '../models/discussion.js';
 import { YamlStorageService } from '../services/yamlStorageService.js';
 import { GitService } from '../services/gitService.js';
 import { AnchorIndexer } from '../services/anchorIndexer.js';
 import { DiscussionsTreeDataProvider } from './discussionsTreeDataProvider.js';
+import { ReadMentionsStorage } from '../services/readMentionsStorage.js';
 
 export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'longLivedDiscussionsChat';
 
     private _view?: vscode.WebviewView;
     private _currentDiscussion?: DiscussionWithAnchorStatus;
+    private _currentUserName: string = '';
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -21,7 +23,19 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
         private readonly gitService: GitService,
         private readonly anchorIndexer: AnchorIndexer,
         private readonly treeDataProvider: DiscussionsTreeDataProvider,
-    ) {}
+        private readonly readMentionsStorage: ReadMentionsStorage,
+    ) {
+        // Load current user name
+        this._loadCurrentUser();
+        
+        // Refresh when read mentions change
+        this.readMentionsStorage.onDidChange(() => this._updateWebview());
+    }
+
+    private async _loadCurrentUser(): Promise<void> {
+        const user = await this.gitService.getCurrentUser();
+        this._currentUserName = user.name;
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -48,6 +62,12 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'closeDiscussion':
                     await this._closeDiscussion();
+                    break;
+                case 'markCommentMentionRead':
+                    await this._markCommentMentionRead(data.commentId);
+                    break;
+                case 'markAllMentionsRead':
+                    await this._markAllMentionsRead();
                     break;
             }
         });
@@ -76,6 +96,7 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
      * Refresh the current discussion from disk
      */
     public async refresh() {
+        await this._loadCurrentUser();
         if (this._currentDiscussion) {
             const updated = await this.yamlStorage.readDiscussion(this._currentDiscussion.id);
             if (updated) {
@@ -91,14 +112,71 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private async _updateWebview() {
-        if (!this._view) {
+        if (!this._view || !this._currentDiscussion) {
+            if (this._view) {
+                this._view.webview.postMessage({
+                    type: 'updateDiscussion',
+                    discussion: null,
+                    currentUserName: this._currentUserName,
+                    readCommentIds: [],
+                });
+            }
             return;
         }
 
+        // Get the list of comment IDs that have been marked as read locally
+        const readCommentIds = this.readMentionsStorage.getReadCommentIds();
+
         this._view.webview.postMessage({
             type: 'updateDiscussion',
-            discussion: this._currentDiscussion || null,
+            discussion: this._currentDiscussion,
+            currentUserName: this._currentUserName,
+            readCommentIds: readCommentIds,
         });
+    }
+
+    private async _markCommentMentionRead(commentId: string) {
+        if (!this._currentDiscussion) {
+            return;
+        }
+
+        try {
+            // Mark as read in local storage (no YAML changes, no commits)
+            await this.readMentionsStorage.markCommentRead(commentId);
+
+            // Refresh views (storage fires onDidChange which triggers refresh)
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to mark mention as read: ${error}`);
+        }
+    }
+
+    private async _markAllMentionsRead() {
+        if (!this._currentDiscussion) {
+            return;
+        }
+
+        try {
+            // Get all comment IDs that have mentions for current user
+            const commentIdsWithMentions: string[] = [];
+            for (const comment of this._currentDiscussion.comments) {
+                if (hasMentionFor(comment.body, this._currentUserName)) {
+                    commentIdsWithMentions.push(comment.id);
+                }
+            }
+
+            if (commentIdsWithMentions.length === 0) {
+                vscode.window.showInformationMessage('No mentions to mark as read.');
+                return;
+            }
+
+            // Mark all as read in local storage (no YAML changes, no commits)
+            await this.readMentionsStorage.markCommentsRead(commentIdsWithMentions);
+
+            vscode.window.showInformationMessage('All mentions marked as read.');
+            // Refresh views (storage fires onDidChange which triggers refresh)
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to mark mentions as read: ${error}`);
+        }
     }
 
     private async _addComment(text: string) {
@@ -114,10 +192,10 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                 throw new Error('Discussion not found');
             }
 
-            // Add comment
-            const maxId = currentDiscussion.comments.reduce((max, c) => Math.max(max, c.id), 0);
+            // Add comment with unique ID
+            const commentId = generateCommentId();
             currentDiscussion.comments.push({
-                id: maxId + 1,
+                id: commentId,
                 author: user.name,
                 created_at: new Date().toISOString(),
                 body: text.trim(),
@@ -128,7 +206,7 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
             await this.gitService.commitDiscussion(
                 currentDiscussion.id,
                 'Add comment',
-                `comment #${maxId + 1}`
+                commentId
             );
 
             // Update local state
@@ -299,6 +377,37 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-descriptionForeground);
             font-style: italic;
         }
+        .comment.has-mention {
+            background-color: rgba(255, 193, 7, 0.1);
+            border-left: 3px solid var(--vscode-notificationsWarningIcon-foreground, #cca700);
+        }
+        .mention-bell {
+            cursor: pointer;
+            margin-left: 6px;
+            opacity: 0.9;
+            font-size: 12px;
+        }
+        .mention-bell:hover {
+            opacity: 1;
+        }
+        .mention {
+            color: var(--vscode-textLink-foreground);
+            font-weight: 600;
+        }
+        .mark-all-btn {
+            margin-left: auto;
+            padding: 2px 8px;
+            font-size: 11px;
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .mark-all-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+        }
         .input-area {
             padding: 10px 12px;
             border-top: 1px solid var(--vscode-panel-border);
@@ -381,6 +490,8 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
         const closeDiscussionBtn = document.getElementById('close-discussion');
 
         let currentDiscussion = null;
+        let currentUserName = '';
+        let readCommentIds = [];
 
         // Handle messages from extension
         window.addEventListener('message', event => {
@@ -388,10 +499,64 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
             switch (message.type) {
                 case 'updateDiscussion':
                     currentDiscussion = message.discussion;
+                    currentUserName = message.currentUserName || '';
+                    readCommentIds = message.readCommentIds || [];
                     render();
                     break;
             }
         });
+
+        /**
+         * Check if a mention matches an author name using fuzzy matching.
+         * Characters in mention must appear in order in author name (case-insensitive).
+         */
+        function matchesMention(mention, authorName) {
+            const cleanMention = mention.replace(/^@/, '').toLowerCase();
+            const normalizedAuthor = authorName.replace(/\\s+/g, '').toLowerCase();
+            
+            if (!cleanMention || !normalizedAuthor) return false;
+            
+            let authorIndex = 0;
+            for (const char of cleanMention) {
+                const foundIndex = normalizedAuthor.indexOf(char, authorIndex);
+                if (foundIndex === -1) return false;
+                authorIndex = foundIndex + 1;
+            }
+            return true;
+        }
+
+        /**
+         * Check if comment has unread mention for current user
+         * A mention is unread if the comment ID is NOT in readCommentIds
+         */
+        function hasUnreadMentionForUser(comment) {
+            if (!currentUserName) return false;
+            // If this comment's mentions have been marked as read, skip
+            if (readCommentIds.includes(comment.id)) return false;
+            
+            // Check if comment body has a mention for current user
+            const regex = /@([a-zA-Z][a-zA-Z0-9_-]*)/g;
+            let match;
+            while ((match = regex.exec(comment.body)) !== null) {
+                if (matchesMention(match[1], currentUserName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Format mentions in comment body with styling
+         */
+        function formatMentions(text) {
+            // First escape HTML
+            let escaped = escapeHtml(text);
+            
+            // Replace @mentions with highlighted style
+            escaped = escaped.replace(/@([a-zA-Z][a-zA-Z0-9_-]*)/g, '<span class="mention">@$1</span>');
+            
+            return escaped;
+        }
 
         function render() {
             if (!currentDiscussion) {
@@ -415,6 +580,9 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
             goToAnchorBtn.style.display = currentDiscussion.isAnchored ? 'inline-block' : 'none';
             closeDiscussionBtn.style.display = currentDiscussion.status === 'closed' ? 'none' : 'inline-block';
 
+            // Check if any comments have unread mentions for current user
+            const hasAnyUnreadMentions = currentDiscussion.comments.some(c => hasUnreadMentionForUser(c));
+
             // Comments
             if (currentDiscussion.comments.length === 0) {
                 commentsEl.innerHTML = '<div class="no-comments">No comments yet. Start the conversation!</div>';
@@ -422,16 +590,31 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                 commentsEl.innerHTML = currentDiscussion.comments.map(comment => {
                     const date = new Date(comment.created_at);
                     const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const hasMention = hasUnreadMentionForUser(comment);
+                    const mentionClass = hasMention ? 'has-mention' : '';
+                    const bellIcon = hasMention 
+                        ? \`<span class="mention-bell" data-comment-id="\${comment.id}" title="Click to mark mention as read">🔔</span>\`
+                        : '';
+                    
                     return \`
-                        <div class="comment">
+                        <div class="comment \${mentionClass}">
                             <div class="comment-header">
-                                <span class="author">\${escapeHtml(comment.author)}</span>
+                                <span class="author">\${escapeHtml(comment.author)}\${bellIcon}</span>
                                 <span class="time">\${timeStr}</span>
                             </div>
-                            <div class="body">\${escapeHtml(comment.body)}</div>
+                            <div class="body">\${formatMentions(comment.body)}</div>
                         </div>
                     \`;
                 }).join('');
+                
+                // Add click handlers for bell icons
+                document.querySelectorAll('.mention-bell').forEach(bell => {
+                    bell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const commentId = bell.dataset.commentId;
+                        vscode.postMessage({ type: 'markCommentMentionRead', commentId: commentId });
+                    });
+                });
                 
                 // Scroll to bottom
                 commentsEl.scrollTop = commentsEl.scrollHeight;
@@ -443,7 +626,7 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
             if (currentDiscussion.status === 'closed') {
                 commentInput.placeholder = 'Discussion is closed';
             } else {
-                commentInput.placeholder = 'Write a comment...';
+                commentInput.placeholder = 'Write a comment... (use @name to mention)';
             }
         }
 

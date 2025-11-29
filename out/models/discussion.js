@@ -10,8 +10,13 @@ exports.getCommentPrefix = getCommentPrefix;
 exports.formatAnchorComment = formatAnchorComment;
 exports.generateDiscussionId = generateDiscussionId;
 exports.isValidDiscussionId = isValidDiscussionId;
+exports.generateCommentId = generateCommentId;
+exports.isValidCommentId = isValidCommentId;
 exports.createNewDiscussion = createNewDiscussion;
 exports.addCommentToDiscussion = addCommentToDiscussion;
+exports.matchesMention = matchesMention;
+exports.extractMentions = extractMentions;
+exports.hasMentionFor = hasMentionFor;
 /**
  * Comment prefix mapping for different languages
  */
@@ -84,6 +89,20 @@ function isValidDiscussionId(id) {
     return /^d-[a-f0-9]{8}$/.test(id);
 }
 /**
+ * Generate a unique comment ID
+ * Format: c-XXXXXXXX (c- prefix + 8 lowercase hex characters)
+ */
+function generateCommentId() {
+    const hex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    return `c-${hex}`;
+}
+/**
+ * Validate a comment ID format
+ */
+function isValidCommentId(id) {
+    return /^c-[a-f0-9]{8}$/.test(id);
+}
+/**
  * Create a new discussion with default values
  */
 function createNewDiscussion(id, title, anchor, author, initialComment) {
@@ -101,7 +120,7 @@ function createNewDiscussion(id, title, anchor, author, initialComment) {
     };
     if (initialComment && initialComment.trim()) {
         discussion.comments.push({
-            id: 1,
+            id: generateCommentId(),
             author,
             created_at: now,
             body: initialComment.trim(),
@@ -113,9 +132,8 @@ function createNewDiscussion(id, title, anchor, author, initialComment) {
  * Add a comment to a discussion and return the updated discussion
  */
 function addCommentToDiscussion(discussion, author, body) {
-    const maxId = discussion.comments.reduce((max, c) => Math.max(max, c.id), 0);
     const newComment = {
-        id: maxId + 1,
+        id: generateCommentId(),
         author,
         created_at: new Date().toISOString(),
         body: body.trim(),
@@ -124,5 +142,57 @@ function addCommentToDiscussion(discussion, author, body) {
         ...discussion,
         comments: [...discussion.comments, newComment],
     };
+}
+// ============================================================================
+// Mention Utilities
+// ============================================================================
+/**
+ * Check if a mention matches an author name using fuzzy matching.
+ * The characters in the mention must appear in the same order in the author name.
+ * Case-insensitive.
+ *
+ * Examples:
+ * - @andre matches "Andre Schuster", "Andreas", "Alexander Andre"
+ * - @janMat matches "JanMeierMattis", "Jan Mattis"
+ */
+function matchesMention(mention, authorName) {
+    // Remove @ prefix if present
+    const cleanMention = mention.startsWith('@') ? mention.slice(1) : mention;
+    if (!cleanMention || !authorName) {
+        return false;
+    }
+    // Remove spaces from author name for matching
+    const normalizedAuthor = authorName.replace(/\s+/g, '').toLowerCase();
+    const normalizedMention = cleanMention.toLowerCase();
+    // Check if all characters in mention appear in order in author name
+    let authorIndex = 0;
+    for (const char of normalizedMention) {
+        const foundIndex = normalizedAuthor.indexOf(char, authorIndex);
+        if (foundIndex === -1) {
+            return false;
+        }
+        authorIndex = foundIndex + 1;
+    }
+    return true;
+}
+/**
+ * Extract all mentions from a comment body.
+ * Returns the mention strings without the @ prefix.
+ */
+function extractMentions(body) {
+    const regex = /@([a-zA-Z][a-zA-Z0-9_-]*)/g;
+    const mentions = [];
+    let match;
+    while ((match = regex.exec(body)) !== null) {
+        mentions.push(match[1]);
+    }
+    return [...new Set(mentions)]; // Remove duplicates
+}
+/**
+ * Check if a comment body has a mention for a specific author.
+ */
+function hasMentionFor(body, authorName) {
+    const mentions = extractMentions(body);
+    return mentions.some(mention => matchesMention(mention, authorName));
 }
 //# sourceMappingURL=discussion.js.map

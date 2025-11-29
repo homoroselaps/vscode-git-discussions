@@ -96,6 +96,12 @@
         "title": "Sync Discussions with Remote",
         "category": "Discussions",
         "icon": "$(sync)"
+      },
+      {
+        "command": "longLivedDiscussions.markAllMentionsRead",
+        "title": "Mark All Mentions as Read",
+        "category": "Discussions",
+        "icon": "$(bell-slash)"
       }
     ],
     "menus": {
@@ -118,8 +124,23 @@
           "group": "inline"
         },
         {
+          "command": "longLivedDiscussions.addComment",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
+          "group": "inline"
+        },
+        {
           "command": "longLivedDiscussions.goToAnchor",
           "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "inline"
+        },
+        {
+          "command": "longLivedDiscussions.goToAnchor",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
+          "group": "inline"
+        },
+        {
+          "command": "longLivedDiscussions.markAllMentionsRead",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
           "group": "inline"
         },
         {
@@ -128,13 +149,33 @@
           "group": "1_actions"
         },
         {
+          "command": "longLivedDiscussions.closeDiscussion",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
+          "group": "1_actions"
+        },
+        {
           "command": "longLivedDiscussions.closeAndRemoveAnchor",
           "when": "view == longLivedDiscussionsView && viewItem == discussion",
           "group": "1_actions"
         },
         {
+          "command": "longLivedDiscussions.closeAndRemoveAnchor",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
+          "group": "1_actions"
+        },
+        {
+          "command": "longLivedDiscussions.markAllMentionsRead",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
+          "group": "1_actions"
+        },
+        {
           "command": "longLivedDiscussions.openYamlFile",
           "when": "view == longLivedDiscussionsView && viewItem == discussion",
+          "group": "2_open"
+        },
+        {
+          "command": "longLivedDiscussions.openYamlFile",
+          "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
           "group": "2_open"
         }
       ],

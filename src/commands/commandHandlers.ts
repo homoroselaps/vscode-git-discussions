@@ -10,12 +10,14 @@ import {
     createNewDiscussion, 
     addCommentToDiscussion,
     formatAnchorComment,
+    hasMentionFor,
 } from '../models/discussion.js';
 import { SidecarRepoService } from '../services/sidecarRepoService.js';
 import { YamlStorageService } from '../services/yamlStorageService.js';
 import { AnchorIndexer } from '../services/anchorIndexer.js';
 import { GitService } from '../services/gitService.js';
 import { DiscussionsTreeDataProvider } from '../providers/discussionsTreeDataProvider.js';
+import { ReadMentionsStorage } from '../services/readMentionsStorage.js';
 
 export class CommandHandlers {
     constructor(
@@ -24,6 +26,7 @@ export class CommandHandlers {
         private anchorIndexer: AnchorIndexer,
         private gitService: GitService,
         private treeDataProvider: DiscussionsTreeDataProvider,
+        private readMentionsStorage: ReadMentionsStorage,
     ) {}
 
     /**
@@ -403,5 +406,50 @@ export class CommandHandlers {
     async refresh(): Promise<void> {
         await this.anchorIndexer.scanWorkspace();
         await this.treeDataProvider.refresh();
+    }
+
+    /**
+     * Mark all mentions of current user as read in a discussion (stored locally, not in YAML)
+     */
+    async markAllMentionsRead(discussion?: DiscussionWithAnchorStatus): Promise<void> {
+        if (!this.sidecarService.isLinked) {
+            this.sidecarService.showStatusNotification();
+            return;
+        }
+
+        if (!discussion) {
+            return;
+        }
+
+        try {
+            const currentDiscussion = await this.yamlStorage.readDiscussion(discussion.id);
+            if (!currentDiscussion) {
+                throw new Error('Discussion not found');
+            }
+
+            // Get current user
+            const user = await this.gitService.getCurrentUser();
+
+            // Find all comment IDs that have mentions for current user
+            const commentIdsWithMentions: string[] = [];
+            for (const comment of currentDiscussion.comments) {
+                if (hasMentionFor(comment.body, user.name)) {
+                    commentIdsWithMentions.push(comment.id);
+                }
+            }
+
+            if (commentIdsWithMentions.length === 0) {
+                vscode.window.showInformationMessage('No mentions to mark as read.');
+                return;
+            }
+
+            // Mark all as read in local storage (no YAML changes, no commits)
+            await this.readMentionsStorage.markCommentsRead(commentIdsWithMentions);
+
+            // Refresh tree (storage fires onDidChange which triggers refresh)
+            vscode.window.showInformationMessage('All mentions marked as read.');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to mark mentions as read: ${error}`);
+        }
     }
 }

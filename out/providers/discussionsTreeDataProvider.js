@@ -42,6 +42,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscussionsTreeDataProvider = exports.DiscussionTreeItem = void 0;
 const vscode = __importStar(require("vscode"));
+const discussion_js_1 = require("../models/discussion.js");
 /**
  * Custom tree item with type information
  */
@@ -52,7 +53,8 @@ class DiscussionTreeItem extends vscode.TreeItem {
     discussion;
     filePath;
     folderPath;
-    constructor(itemType, label, collapsibleState, discussion, filePath, folderPath) {
+    hasUnreadMention;
+    constructor(itemType, label, collapsibleState, discussion, filePath, folderPath, hasUnreadMention) {
         super(label, collapsibleState);
         this.itemType = itemType;
         this.label = label;
@@ -60,6 +62,7 @@ class DiscussionTreeItem extends vscode.TreeItem {
         this.discussion = discussion;
         this.filePath = filePath;
         this.folderPath = folderPath;
+        this.hasUnreadMention = hasUnreadMention;
         this.setupItem();
     }
     setupItem() {
@@ -96,9 +99,12 @@ class DiscussionTreeItem extends vscode.TreeItem {
         // Use description for additional info since label is readonly after construction
         this.description = `(${anchor}) ${d.comments.length} comment${d.comments.length !== 1 ? 's' : ''}`;
         this.tooltip = this.createTooltip();
-        this.contextValue = 'discussion';
-        // Icon based on status
-        if (d.status === 'closed') {
+        this.contextValue = this.hasUnreadMention ? 'discussionWithMention' : 'discussion';
+        // Icon based on status - unread mentions take priority
+        if (this.hasUnreadMention) {
+            this.iconPath = new vscode.ThemeIcon('bell', new vscode.ThemeColor('notificationsWarningIcon.foreground'));
+        }
+        else if (d.status === 'closed') {
             this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
         }
         else if (!d.isAnchored) {
@@ -141,21 +147,57 @@ class DiscussionsTreeDataProvider {
     yamlStorage;
     anchorIndexer;
     sidecarService;
+    gitService;
+    readMentionsStorage;
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     discussions = [];
-    constructor(yamlStorage, anchorIndexer, sidecarService) {
+    currentUserName = '';
+    constructor(yamlStorage, anchorIndexer, sidecarService, gitService, readMentionsStorage) {
         this.yamlStorage = yamlStorage;
         this.anchorIndexer = anchorIndexer;
         this.sidecarService = sidecarService;
+        this.gitService = gitService;
+        this.readMentionsStorage = readMentionsStorage;
         // Listen for changes
         this.yamlStorage.onDiscussionsChanged(() => this.refresh());
         this.anchorIndexer.onAnchorsChanged(() => this.refresh());
+        this.readMentionsStorage.onDidChange(() => this.refresh());
+        // Load current user
+        this.loadCurrentUser();
+    }
+    /**
+     * Load the current user's name for mention matching
+     */
+    async loadCurrentUser() {
+        const user = await this.gitService.getCurrentUser();
+        this.currentUserName = user.name;
+    }
+    /**
+     * Check if a discussion has unread mentions for the current user
+     */
+    hasUnreadMentionFor(discussion) {
+        if (!this.currentUserName) {
+            return false;
+        }
+        const readCommentIds = this.readMentionsStorage.getReadCommentIds();
+        for (const comment of discussion.comments) {
+            // Skip if this comment's mentions have been marked as read
+            if (readCommentIds.includes(comment.id)) {
+                continue;
+            }
+            // Check if this comment has a mention for the current user
+            if ((0, discussion_js_1.hasMentionFor)(comment.body, this.currentUserName)) {
+                return true;
+            }
+        }
+        return false;
     }
     /**
      * Refresh the tree view
      */
     async refresh() {
+        await this.loadCurrentUser();
         await this.loadDiscussions();
         this._onDidChangeTreeData.fire();
     }
@@ -247,14 +289,20 @@ class DiscussionsTreeDataProvider {
             const lineB = b.currentAnchor?.line || b.anchor.start_line;
             return lineA - lineB;
         });
-        return discussions.map(d => new DiscussionTreeItem('discussion', d.title, vscode.TreeItemCollapsibleState.None, d));
+        return discussions.map(d => {
+            const hasUnreadMention = this.hasUnreadMentionFor(d);
+            return new DiscussionTreeItem('discussion', d.title, vscode.TreeItemCollapsibleState.None, d, undefined, undefined, hasUnreadMention);
+        });
     }
     /**
      * Get unanchored/historical discussion items
      */
     getUnanchoredItems() {
         const unanchored = this.discussions.filter(d => !d.isAnchored);
-        return unanchored.map(d => new DiscussionTreeItem('discussion', d.title, vscode.TreeItemCollapsibleState.None, d));
+        return unanchored.map(d => {
+            const hasUnreadMention = this.hasUnreadMentionFor(d);
+            return new DiscussionTreeItem('discussion', d.title, vscode.TreeItemCollapsibleState.None, d, undefined, undefined, hasUnreadMention);
+        });
     }
     /**
      * Get items in a folder (for nested folder structure - future enhancement)

@@ -9,6 +9,7 @@ import { SidecarRepoService } from './services/sidecarRepoService.js';
 import { GitService } from './services/gitService.js';
 import { YamlStorageService } from './services/yamlStorageService.js';
 import { AnchorIndexer } from './services/anchorIndexer.js';
+import { ReadMentionsStorage } from './services/readMentionsStorage.js';
 import { DiscussionsTreeDataProvider } from './providers/discussionsTreeDataProvider.js';
 import { DiscussionWebviewProvider } from './providers/discussionWebviewProvider.js';
 import { CommandHandlers } from './commands/commandHandlers.js';
@@ -18,6 +19,7 @@ let sidecarService: SidecarRepoService;
 let gitService: GitService;
 let yamlStorage: YamlStorageService;
 let anchorIndexer: AnchorIndexer;
+let readMentionsStorage: ReadMentionsStorage;
 
 // Providers
 let treeDataProvider: DiscussionsTreeDataProvider;
@@ -34,15 +36,17 @@ export async function activate(context: vscode.ExtensionContext) {
     gitService = new GitService();
     yamlStorage = new YamlStorageService(sidecarService);
     anchorIndexer = new AnchorIndexer(sidecarService);
+    readMentionsStorage = new ReadMentionsStorage();
 
     // Initialize providers
-    treeDataProvider = new DiscussionsTreeDataProvider(yamlStorage, anchorIndexer, sidecarService);
+    treeDataProvider = new DiscussionsTreeDataProvider(yamlStorage, anchorIndexer, sidecarService, gitService, readMentionsStorage);
     webviewProvider = new DiscussionWebviewProvider(
         context.extensionUri,
         yamlStorage,
         gitService,
         anchorIndexer,
-        treeDataProvider
+        treeDataProvider,
+        readMentionsStorage
     );
 
     // Initialize command handlers
@@ -51,7 +55,8 @@ export async function activate(context: vscode.ExtensionContext) {
         yamlStorage,
         anchorIndexer,
         gitService,
-        treeDataProvider
+        treeDataProvider,
+        readMentionsStorage
     );
 
     // Register tree view
@@ -128,6 +133,10 @@ export async function activate(context: vscode.ExtensionContext) {
             await webviewProvider.refresh();
             vscode.window.showInformationMessage('Discussions synced with remote.');
         }),
+        vscode.commands.registerCommand('longLivedDiscussions.markAllMentionsRead', async (item) => {
+            await commandHandlers.markAllMentionsRead(item?.discussion);
+            await webviewProvider.refresh();
+        }),
     );
 
     // Refresh views when sync brings new data from remote
@@ -144,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext) {
         gitService,
         yamlStorage,
         anchorIndexer,
+        readMentionsStorage,
         treeDataProvider,
     );
 
@@ -185,6 +195,9 @@ async function initializeExtension(): Promise<void> {
         
         // Initialize YAML storage
         await yamlStorage.initialize();
+        
+        // Initialize read mentions storage (stored in code repo's .vscode folder)
+        await readMentionsStorage.initialize(status.codeRepoPath!);
         
         // Scan for anchors
         await anchorIndexer.scanWorkspace();

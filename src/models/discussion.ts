@@ -13,8 +13,8 @@ export type DiscussionStatus = 'open' | 'closed';
  * A comment within a discussion
  */
 export interface Comment {
-    /** Incrementing integer ID within the discussion */
-    id: number;
+    /** Unique ID in format c-XXXXXXXX (8 hex chars) */
+    id: string;
     /** Author username or identifier */
     author: string;
     /** ISO 8601 timestamp */
@@ -182,6 +182,24 @@ export function isValidDiscussionId(id: string): boolean {
 }
 
 /**
+ * Generate a unique comment ID
+ * Format: c-XXXXXXXX (c- prefix + 8 lowercase hex characters)
+ */
+export function generateCommentId(): string {
+    const hex = Array.from({ length: 8 }, () => 
+        Math.floor(Math.random() * 16).toString(16)
+    ).join('');
+    return `c-${hex}`;
+}
+
+/**
+ * Validate a comment ID format
+ */
+export function isValidCommentId(id: string): boolean {
+    return /^c-[a-f0-9]{8}$/.test(id);
+}
+
+/**
  * Create a new discussion with default values
  */
 export function createNewDiscussion(
@@ -207,7 +225,7 @@ export function createNewDiscussion(
 
     if (initialComment && initialComment.trim()) {
         discussion.comments.push({
-            id: 1,
+            id: generateCommentId(),
             author,
             created_at: now,
             body: initialComment.trim(),
@@ -225,9 +243,8 @@ export function addCommentToDiscussion(
     author: string,
     body: string
 ): Discussion {
-    const maxId = discussion.comments.reduce((max, c) => Math.max(max, c.id), 0);
     const newComment: Comment = {
-        id: maxId + 1,
+        id: generateCommentId(),
         author,
         created_at: new Date().toISOString(),
         body: body.trim(),
@@ -237,4 +254,66 @@ export function addCommentToDiscussion(
         ...discussion,
         comments: [...discussion.comments, newComment],
     };
+}
+
+// ============================================================================
+// Mention Utilities
+// ============================================================================
+
+/**
+ * Check if a mention matches an author name using fuzzy matching.
+ * The characters in the mention must appear in the same order in the author name.
+ * Case-insensitive.
+ * 
+ * Examples:
+ * - @andre matches "Andre Schuster", "Andreas", "Alexander Andre"
+ * - @janMat matches "JanMeierMattis", "Jan Mattis"
+ */
+export function matchesMention(mention: string, authorName: string): boolean {
+    // Remove @ prefix if present
+    const cleanMention = mention.startsWith('@') ? mention.slice(1) : mention;
+    
+    if (!cleanMention || !authorName) {
+        return false;
+    }
+
+    // Remove spaces from author name for matching
+    const normalizedAuthor = authorName.replace(/\s+/g, '').toLowerCase();
+    const normalizedMention = cleanMention.toLowerCase();
+
+    // Check if all characters in mention appear in order in author name
+    let authorIndex = 0;
+    for (const char of normalizedMention) {
+        const foundIndex = normalizedAuthor.indexOf(char, authorIndex);
+        if (foundIndex === -1) {
+            return false;
+        }
+        authorIndex = foundIndex + 1;
+    }
+
+    return true;
+}
+
+/**
+ * Extract all mentions from a comment body.
+ * Returns the mention strings without the @ prefix.
+ */
+export function extractMentions(body: string): string[] {
+    const regex = /@([a-zA-Z][a-zA-Z0-9_-]*)/g;
+    const mentions: string[] = [];
+    let match;
+
+    while ((match = regex.exec(body)) !== null) {
+        mentions.push(match[1]);
+    }
+
+    return [...new Set(mentions)]; // Remove duplicates
+}
+
+/**
+ * Check if a comment body has a mention for a specific author.
+ */
+export function hasMentionFor(body: string, authorName: string): boolean {
+    const mentions = extractMentions(body);
+    return mentions.some(mention => matchesMention(mention, authorName));
 }
