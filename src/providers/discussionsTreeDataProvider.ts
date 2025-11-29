@@ -18,7 +18,7 @@ import { ReadMentionsStorage } from '../services/readMentionsStorage.js';
 /**
  * Tree item types
  */
-type TreeItemType = 'root-anchored' | 'root-unanchored' | 'folder' | 'file' | 'discussion';
+type TreeItemType = 'root-unread-mentions' | 'root-anchored' | 'root-unanchored' | 'folder' | 'file' | 'discussion';
 
 /**
  * Custom tree item with type information
@@ -39,6 +39,10 @@ export class DiscussionTreeItem extends vscode.TreeItem {
 
     private setupItem(): void {
         switch (this.itemType) {
+            case 'root-unread-mentions':
+                this.iconPath = new vscode.ThemeIcon('bell', new vscode.ThemeColor('notificationsWarningIcon.foreground'));
+                this.contextValue = 'root';
+                break;
             case 'root-anchored':
                 this.iconPath = new vscode.ThemeIcon('file-code');
                 this.contextValue = 'root';
@@ -123,6 +127,9 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
     private _onDidChangeTreeData = new vscode.EventEmitter<DiscussionTreeItem | undefined | null | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+    private _onDidChangeUnreadCount = new vscode.EventEmitter<number>();
+    readonly onDidChangeUnreadCount = this._onDidChangeUnreadCount.event;
+
     private discussions: DiscussionWithAnchorStatus[] = [];
     private currentUserName: string = '';
 
@@ -175,12 +182,40 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
     }
 
     /**
+     * Count discussions with unread mentions for the current user
+     */
+    getUnreadMentionCount(): number {
+        if (!this.currentUserName) {
+            return 0;
+        }
+
+        let count = 0;
+        for (const discussion of this.discussions) {
+            if (this.hasUnreadMentionFor(discussion)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Get discussions with unread mentions for the current user
+     */
+    private getDiscussionsWithUnreadMentions(): DiscussionWithAnchorStatus[] {
+        if (!this.currentUserName) {
+            return [];
+        }
+        return this.discussions.filter(d => this.hasUnreadMentionFor(d));
+    }
+
+    /**
      * Refresh the tree view
      */
     async refresh(): Promise<void> {
         await this.loadCurrentUser();
         await this.loadDiscussions();
         this._onDidChangeTreeData.fire();
+        this._onDidChangeUnreadCount.fire(this.getUnreadMentionCount());
     }
 
     /**
@@ -213,20 +248,37 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
             return [];
         }
 
-        // Root level - show two groups
+        // Root level - show groups (Unread Mentions only if there are any)
         if (!element) {
-            return [
-                new DiscussionTreeItem(
-                    'root-anchored',
-                    'Files with Discussions',
+            const items: DiscussionTreeItem[] = [];
+            
+            // Only show Unread Mentions if there are any
+            const unreadCount = this.getUnreadMentionCount();
+            if (unreadCount > 0) {
+                items.push(new DiscussionTreeItem(
+                    'root-unread-mentions',
+                    `Unread Mentions (${unreadCount})`,
                     vscode.TreeItemCollapsibleState.Expanded
-                ),
-                new DiscussionTreeItem(
-                    'root-unanchored',
-                    'Unanchored / Historical',
-                    vscode.TreeItemCollapsibleState.Collapsed
-                ),
-            ];
+                ));
+            }
+            
+            items.push(new DiscussionTreeItem(
+                'root-anchored',
+                'Files with Discussions',
+                vscode.TreeItemCollapsibleState.Expanded
+            ));
+            items.push(new DiscussionTreeItem(
+                'root-unanchored',
+                'Unanchored / Historical',
+                vscode.TreeItemCollapsibleState.Collapsed
+            ));
+            
+            return items;
+        }
+
+        // Unread mentions group
+        if (element.itemType === 'root-unread-mentions') {
+            return this.getUnreadMentionItems();
         }
 
         // Anchored discussions group
@@ -250,6 +302,23 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
         }
 
         return [];
+    }
+
+    /**
+     * Get discussion items with unread mentions
+     */
+    private getUnreadMentionItems(): DiscussionTreeItem[] {
+        const withUnread = this.getDiscussionsWithUnreadMentions();
+        
+        return withUnread.map(d => new DiscussionTreeItem(
+            'discussion',
+            d.title,
+            vscode.TreeItemCollapsibleState.None,
+            d,
+            undefined,
+            undefined,
+            true, // hasUnreadMention is always true for these
+        ));
     }
 
     /**
@@ -355,5 +424,6 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
 
     dispose(): void {
         this._onDidChangeTreeData.dispose();
+        this._onDidChangeUnreadCount.dispose();
     }
 }

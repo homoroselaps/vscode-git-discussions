@@ -588,8 +588,12 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                 commentsEl.innerHTML = '<div class="no-comments">No comments yet. Start the conversation!</div>';
             } else {
                 commentsEl.innerHTML = currentDiscussion.comments.map(comment => {
-                    const date = new Date(comment.created_at);
-                    const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const author = comment.author || 'Unknown';
+                    let timeStr = '';
+                    if (comment.created_at) {
+                        const date = new Date(comment.created_at);
+                        timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
                     const hasMention = hasUnreadMentionForUser(comment);
                     const mentionClass = hasMention ? 'has-mention' : '';
                     const bellIcon = hasMention 
@@ -599,7 +603,7 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                     return \`
                         <div class="comment \${mentionClass}">
                             <div class="comment-header">
-                                <span class="author">\${escapeHtml(comment.author)}\${bellIcon}</span>
+                                <span class="author">\${escapeHtml(author)}\${bellIcon}</span>
                                 <span class="time">\${timeStr}</span>
                             </div>
                             <div class="body">\${formatMentions(comment.body)}</div>

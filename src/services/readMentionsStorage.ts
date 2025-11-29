@@ -73,6 +73,15 @@ export class ReadMentionsStorage {
     }
 
     /**
+     * Reload data from disk and notify listeners
+     * Call this after syncing discussions to ensure badge counts are up to date
+     */
+    async refresh(): Promise<void> {
+        await this.load();
+        this._onDidChange.fire();
+    }
+
+    /**
      * Save data to disk
      */
     private async save(): Promise<void> {

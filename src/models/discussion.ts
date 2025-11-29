@@ -15,10 +15,10 @@ export type DiscussionStatus = 'open' | 'closed';
 export interface Comment {
     /** Unique ID in format c-XXXXXXXX (8 hex chars) */
     id: string;
-    /** Author username or identifier */
-    author: string;
-    /** ISO 8601 timestamp */
-    created_at: string;
+    /** Author username or identifier (optional for legacy/imported comments) */
+    author?: string;
+    /** ISO 8601 timestamp (optional for legacy/imported comments) */
+    created_at?: string;
     /** The comment text (multi-line supported) */
     body: string;
 }
@@ -65,8 +65,6 @@ export interface Discussion {
     status: DiscussionStatus;
     /** Optional: Git remote URL of the code repo */
     code_repo?: string;
-    /** Optional: Git remote URL of the discussions repo */
-    discussion_repo?: string;
     /** Anchor information */
     anchor: Anchor;
     /** Creation metadata */

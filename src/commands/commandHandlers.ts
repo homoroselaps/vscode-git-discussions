@@ -112,12 +112,9 @@ export class CommandHandlers {
                 initialComment
             );
 
-            // Add optional remote URLs
+            // Add optional code repo URL for reference
             if (codeRepoUrl) {
                 discussion.code_repo = codeRepoUrl;
-            }
-            if (discussionRepoUrl) {
-                discussion.discussion_repo = discussionRepoUrl;
             }
 
             // Write YAML file

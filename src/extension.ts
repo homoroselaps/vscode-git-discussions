@@ -66,6 +66,16 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(treeView);
 
+    // Update badge when unread count changes
+    const updateBadge = (count: number) => {
+        treeView.badge = count > 0 
+            ? { value: count, tooltip: `${count} unread mention${count !== 1 ? 's' : ''}` }
+            : undefined;
+    };
+    treeDataProvider.onDidChangeUnreadCount(updateBadge);
+    // Set initial badge (will be set after first refresh)
+    updateBadge(treeDataProvider.getUnreadMentionCount());
+
     // Register webview provider for chat panel
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(
@@ -142,6 +152,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // Refresh views when sync brings new data from remote
     context.subscriptions.push(
         gitService.onDidSync(async () => {
+            // Reload read mentions from disk in case it was modified
+            await readMentionsStorage.refresh();
             await commandHandlers.refresh();
             await webviewProvider.refresh();
         })
