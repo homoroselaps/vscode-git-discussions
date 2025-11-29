@@ -186,36 +186,35 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
 
         try {
             const user = await this.gitService.getCurrentUser();
-            const currentDiscussion = await this.yamlStorage.readDiscussion(this._currentDiscussion.id);
             
-            if (!currentDiscussion) {
-                throw new Error('Discussion not found');
-            }
-
-            // Add comment with unique ID
+            // Create new comment
             const commentId = generateCommentId();
-            currentDiscussion.comments.push({
+            const newComment = {
                 id: commentId,
                 author: user.name,
                 created_at: new Date().toISOString(),
                 body: text.trim(),
-            });
+            };
 
-            // Save and commit
-            await this.yamlStorage.writeDiscussion(currentDiscussion);
-            await this.gitService.commitDiscussion(
-                currentDiscussion.id,
-                'Add comment',
-                commentId
+            // Write only the new comment file (not the entire discussion)
+            const commentPath = await this.yamlStorage.writeComment(this._currentDiscussion.id, newComment);
+
+            // Commit just the comment file
+            await this.gitService.commitFile(
+                commentPath,
+                `Add comment to ${this._currentDiscussion.id}: ${commentId}`
             );
 
-            // Update local state
-            const anchor = this.anchorIndexer.getAnchor(currentDiscussion.id);
-            this._currentDiscussion = {
-                ...currentDiscussion,
-                currentAnchor: anchor || null,
-                isAnchored: !!anchor,
-            };
+            // Reload discussion to get updated comments list
+            const updatedDiscussion = await this.yamlStorage.readDiscussion(this._currentDiscussion.id);
+            if (updatedDiscussion) {
+                const anchor = this.anchorIndexer.getAnchor(updatedDiscussion.id);
+                this._currentDiscussion = {
+                    ...updatedDiscussion,
+                    currentAnchor: anchor || null,
+                    isAnchored: !!anchor,
+                };
+            }
 
             // Refresh views
             await this._updateWebview();

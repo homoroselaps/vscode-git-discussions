@@ -188,7 +188,7 @@ export class GitService {
     }
 
     /**
-     * Stage and commit a discussion file, then push if configured
+     * Stage and commit a discussion folder (for new discussions), then push if configured
      */
     async commitDiscussion(discussionId: string, action: string, details?: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('longLivedDiscussions');
@@ -198,7 +198,8 @@ export class GitService {
             return;
         }
 
-        const relativePath = path.join('discussions', `${discussionId}.yml`);
+        // Stage the entire discussion folder
+        const relativePath = path.join('discussions', discussionId);
         await this.stageFile(relativePath);
         
         const message = details 
@@ -208,6 +209,22 @@ export class GitService {
         await this.commit(message);
         
         // Push after commit if remote exists
+        await this.push();
+    }
+
+    /**
+     * Stage and commit a specific file (for adding comments or updating meta), then push
+     */
+    async commitFile(relativePath: string, message: string): Promise<void> {
+        const config = vscode.workspace.getConfiguration('longLivedDiscussions');
+        const autoCommit = config.get<boolean>('autoCommitDiscussionRepo', true);
+        
+        if (!autoCommit) {
+            return;
+        }
+
+        await this.stageFile(relativePath);
+        await this.commit(message);
         await this.push();
     }
 

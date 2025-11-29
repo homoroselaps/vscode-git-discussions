@@ -8,7 +8,6 @@ import {
     DiscussionWithAnchorStatus, 
     Anchor, 
     createNewDiscussion, 
-    addCommentToDiscussion,
     formatAnchorComment,
     hasMentionFor,
 } from '../models/discussion.js';
@@ -192,23 +191,28 @@ export class CommandHandlers {
             // Get current user
             const user = await this.gitService.getCurrentUser();
 
-            // Load and update discussion
+            // Load current discussion
             const currentDiscussion = await this.yamlStorage.readDiscussion(discussion.id);
             if (!currentDiscussion) {
                 throw new Error('Discussion not found');
             }
 
-            const updatedDiscussion = addCommentToDiscussion(currentDiscussion, user.name, commentText);
-            
-            // Write updated YAML
-            await this.yamlStorage.writeDiscussion(updatedDiscussion);
+            // Create the new comment
+            const { generateCommentId } = await import('../models/discussion.js');
+            const newComment = {
+                id: generateCommentId(),
+                author: user.name,
+                created_at: new Date().toISOString(),
+                body: commentText.trim(),
+            };
 
-            // Commit
-            const newCommentId = updatedDiscussion.comments[updatedDiscussion.comments.length - 1].id;
-            await this.gitService.commitDiscussion(
-                discussion.id,
-                'Add comment',
-                `comment #${newCommentId}`
+            // Write only the new comment file (not the entire discussion)
+            const commentPath = await this.yamlStorage.writeComment(discussion.id, newComment);
+
+            // Commit just the comment file
+            await this.gitService.commitFile(
+                commentPath,
+                `Add comment to ${discussion.id}: ${newComment.id}`
             );
 
             // Refresh
@@ -244,11 +248,12 @@ export class CommandHandlers {
 
             currentDiscussion.status = 'closed';
             
-            // Write updated YAML
-            await this.yamlStorage.writeDiscussion(currentDiscussion);
+            // Write only the meta file (status change doesn't affect comments)
+            await this.yamlStorage.writeDiscussionMeta(currentDiscussion);
 
-            // Commit
-            await this.gitService.commitDiscussion(discussion.id, 'Close');
+            // Commit just the meta file
+            const metaPath = `discussions/${discussion.id}/_meta.yml`;
+            await this.gitService.commitFile(metaPath, `Close discussion ${discussion.id}`);
 
             // Refresh
             await this.treeDataProvider.refresh();
@@ -282,8 +287,9 @@ export class CommandHandlers {
             }
 
             currentDiscussion.status = 'closed';
-            await this.yamlStorage.writeDiscussion(currentDiscussion);
-            await this.gitService.commitDiscussion(discussion.id, 'Close');
+            await this.yamlStorage.writeDiscussionMeta(currentDiscussion);
+            const metaPath = `discussions/${discussion.id}/_meta.yml`;
+            await this.gitService.commitFile(metaPath, `Close discussion ${discussion.id}`);
 
             // Then remove anchor from code if it exists
             if (discussion.isAnchored && discussion.currentAnchor) {

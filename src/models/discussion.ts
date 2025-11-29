@@ -74,6 +74,24 @@ export interface Discussion {
 }
 
 /**
+ * Discussion metadata without comments - stored in _meta.yml
+ */
+export interface DiscussionMeta {
+    /** Unique ID in format d-XXXXXXXX (8 hex chars) */
+    id: string;
+    /** Human-readable title */
+    title: string;
+    /** Current status */
+    status: DiscussionStatus;
+    /** Optional: Git remote URL of the code repo */
+    code_repo?: string;
+    /** Anchor information */
+    anchor: Anchor;
+    /** Creation metadata */
+    metadata: DiscussionMetadata;
+}
+
+/**
  * Anchor location found by scanning code files
  */
 export interface AnchorLocation {
@@ -195,6 +213,49 @@ export function generateCommentId(): string {
  */
 export function isValidCommentId(id: string): boolean {
     return /^c-[a-f0-9]{8}$/.test(id);
+}
+
+/**
+ * Format a date as a compact timestamp for filenames
+ * Format: YYYYMMDDTHHmmssZ (e.g., 20251129T100530Z)
+ * - Sorts chronologically in file explorers
+ * - Human-readable at a glance
+ * - No special characters that need escaping
+ */
+export function formatCompactTimestamp(date: Date = new Date()): string {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+}
+
+/**
+ * Generate a comment filename with timestamp prefix
+ * Format: YYYYMMDDTHHmmssZ_c-XXXXXXXX.yml
+ */
+export function generateCommentFilename(commentId: string, createdAt?: string): string {
+    const date = createdAt ? new Date(createdAt) : new Date();
+    const timestamp = formatCompactTimestamp(date);
+    return `${timestamp}_${commentId}.yml`;
+}
+
+/**
+ * Parse a comment filename to extract the comment ID
+ * Returns null if the filename doesn't match the expected pattern
+ */
+export function parseCommentFilename(filename: string): { timestamp: string; commentId: string } | null {
+    // Match: YYYYMMDDTHHmmssZ_c-XXXXXXXX.yml
+    const match = filename.match(/^(\d{8}T\d{6}Z)_(c-[a-f0-9]{8})\.yml$/);
+    if (!match) {
+        return null;
+    }
+    return {
+        timestamp: match[1],
+        commentId: match[2],
+    };
 }
 
 /**

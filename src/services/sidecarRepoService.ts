@@ -134,14 +134,25 @@ export class SidecarRepoService {
     }
 
     /**
-     * Get the path to a specific discussion YAML file
+     * Get the path to a specific discussion folder (new folder-per-discussion structure)
      */
-    getDiscussionFilePath(discussionId: string): string | null {
+    getDiscussionFolderPath(discussionId: string): string | null {
         const folder = this.getDiscussionsFolderPath();
         if (!folder) {
             return null;
         }
-        return path.join(folder, `${discussionId}.yml`);
+        return path.join(folder, discussionId);
+    }
+
+    /**
+     * Get the path to a discussion's _meta.yml file
+     */
+    getDiscussionFilePath(discussionId: string): string | null {
+        const discussionFolder = this.getDiscussionFolderPath(discussionId);
+        if (!discussionFolder) {
+            return null;
+        }
+        return path.join(discussionFolder, '_meta.yml');
     }
 
     /**
@@ -149,6 +160,16 @@ export class SidecarRepoService {
      */
     async ensureDiscussionsFolderExists(): Promise<void> {
         const folder = this.getDiscussionsFolderPath();
+        if (folder && !fs.existsSync(folder)) {
+            await fs.promises.mkdir(folder, { recursive: true });
+        }
+    }
+
+    /**
+     * Ensure a specific discussion folder exists
+     */
+    async ensureDiscussionFolderExists(discussionId: string): Promise<void> {
+        const folder = this.getDiscussionFolderPath(discussionId);
         if (folder && !fs.existsSync(folder)) {
             await fs.promises.mkdir(folder, { recursive: true });
         }

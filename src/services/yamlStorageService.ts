@@ -1,12 +1,26 @@
 /**
  * YamlStorageService - Handles reading and writing discussion YAML files
+ * 
+ * Uses folder-per-discussion structure to avoid merge conflicts:
+ * discussions/
+ *   d-abc12345/
+ *     _meta.yml                        # Discussion metadata (title, status, anchor)
+ *     20251129T100000Z_c-11111111.yml  # Individual comment files
+ *     20251129T100500Z_c-22222222.yml
  */
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { Discussion, isValidDiscussionId } from '../models/discussion';
+import { 
+    Discussion, 
+    DiscussionMeta, 
+    Comment,
+    isValidDiscussionId,
+    generateCommentFilename,
+    parseCommentFilename,
+} from '../models/discussion';
 import { SidecarRepoService } from './sidecarRepoService';
 
 export class YamlStorageService {
@@ -29,8 +43,8 @@ export class YamlStorageService {
         // Ensure the discussions folder exists
         await this.sidecarService.ensureDiscussionsFolderExists();
 
-        // Set up file watcher for YAML files
-        const pattern = new vscode.RelativePattern(discussionsFolder, '*.yml');
+        // Set up file watcher for YAML files (recursive to catch comment files)
+        const pattern = new vscode.RelativePattern(discussionsFolder, '**/*.yml');
         this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         
         this.fileWatcher.onDidCreate(() => this._onDiscussionsChanged.fire());
@@ -39,74 +53,181 @@ export class YamlStorageService {
     }
 
     /**
-     * Read a discussion from its YAML file
+     * Read a discussion's metadata from _meta.yml
      */
-    async readDiscussion(discussionId: string): Promise<Discussion | null> {
-        const filePath = this.sidecarService.getDiscussionFilePath(discussionId);
-        if (!filePath) {
+    private async readMeta(discussionId: string): Promise<DiscussionMeta | null> {
+        const metaPath = this.sidecarService.getDiscussionFilePath(discussionId);
+        if (!metaPath || !fs.existsSync(metaPath)) {
             return null;
         }
 
         try {
-            if (!fs.existsSync(filePath)) {
-                return null;
-            }
-
-            const content = await fs.promises.readFile(filePath, 'utf-8');
-            const discussion = yaml.load(content) as Discussion;
+            const content = await fs.promises.readFile(metaPath, 'utf-8');
+            const meta = yaml.load(content) as DiscussionMeta;
             
-            // Validate the loaded discussion
-            if (!discussion || !discussion.id || discussion.id !== discussionId) {
-                console.warn(`Invalid discussion file: ${filePath}`);
+            if (!meta || !meta.id || meta.id !== discussionId) {
+                console.warn(`Invalid discussion meta file: ${metaPath}`);
                 return null;
             }
 
-            return discussion;
+            return meta;
         } catch (error) {
-            console.error(`Error reading discussion ${discussionId}:`, error);
+            console.error(`Error reading discussion meta ${discussionId}:`, error);
             return null;
         }
     }
 
     /**
-     * Write a discussion to its YAML file
+     * Read all comments for a discussion from individual files
      */
-    async writeDiscussion(discussion: Discussion): Promise<void> {
+    private async readComments(discussionId: string): Promise<Comment[]> {
+        const discussionFolder = this.sidecarService.getDiscussionFolderPath(discussionId);
+        if (!discussionFolder || !fs.existsSync(discussionFolder)) {
+            return [];
+        }
+
+        try {
+            const files = await fs.promises.readdir(discussionFolder);
+            const comments: Comment[] = [];
+
+            // Filter and sort comment files by filename (which includes timestamp)
+            const commentFiles = files
+                .filter(f => parseCommentFilename(f) !== null)
+                .sort(); // Lexicographic sort works because timestamp is first
+
+            for (const filename of commentFiles) {
+                const filePath = path.join(discussionFolder, filename);
+                try {
+                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const comment = yaml.load(content) as Comment;
+                    if (comment && comment.id && comment.body !== undefined) {
+                        comments.push(comment);
+                    }
+                } catch (error) {
+                    console.warn(`Error reading comment file ${filename}:`, error);
+                }
+            }
+
+            return comments;
+        } catch (error) {
+            console.error(`Error reading comments for ${discussionId}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Read a full discussion (metadata + all comments)
+     */
+    async readDiscussion(discussionId: string): Promise<Discussion | null> {
+        const meta = await this.readMeta(discussionId);
+        if (!meta) {
+            return null;
+        }
+
+        const comments = await this.readComments(discussionId);
+
+        return {
+            ...meta,
+            comments,
+        };
+    }
+
+    /**
+     * Write discussion metadata to _meta.yml (does not write comments)
+     */
+    async writeDiscussionMeta(discussion: Discussion | DiscussionMeta): Promise<void> {
         if (!isValidDiscussionId(discussion.id)) {
             throw new Error(`Invalid discussion ID: ${discussion.id}`);
         }
 
-        const filePath = this.sidecarService.getDiscussionFilePath(discussion.id);
-        if (!filePath) {
+        // Ensure the discussion folder exists
+        await this.sidecarService.ensureDiscussionFolderExists(discussion.id);
+
+        const metaPath = this.sidecarService.getDiscussionFilePath(discussion.id);
+        if (!metaPath) {
             throw new Error('Discussion repo not linked');
         }
 
-        // Ensure the discussions folder exists
-        await this.sidecarService.ensureDiscussionsFolderExists();
+        // Extract only meta fields (exclude comments)
+        const meta: DiscussionMeta = {
+            id: discussion.id,
+            title: discussion.title,
+            status: discussion.status,
+            code_repo: discussion.code_repo,
+            anchor: discussion.anchor,
+            metadata: discussion.metadata,
+        };
 
-        // Convert to YAML with nice formatting
-        const yamlContent = yaml.dump(discussion, {
+        const yamlContent = yaml.dump(meta, {
             indent: 2,
-            lineWidth: -1, // Don't wrap lines
+            lineWidth: -1,
+            quotingType: '"',
+            forceQuotes: false,
+        });
+
+        await fs.promises.writeFile(metaPath, yamlContent, 'utf-8');
+    }
+
+    /**
+     * Write a single comment to its own file
+     * Returns the relative path of the comment file (for git staging)
+     */
+    async writeComment(discussionId: string, comment: Comment): Promise<string> {
+        if (!isValidDiscussionId(discussionId)) {
+            throw new Error(`Invalid discussion ID: ${discussionId}`);
+        }
+
+        const discussionFolder = this.sidecarService.getDiscussionFolderPath(discussionId);
+        if (!discussionFolder) {
+            throw new Error('Discussion repo not linked');
+        }
+
+        // Ensure the discussion folder exists
+        await this.sidecarService.ensureDiscussionFolderExists(discussionId);
+
+        // Generate filename with timestamp
+        const filename = generateCommentFilename(comment.id, comment.created_at);
+        const filePath = path.join(discussionFolder, filename);
+
+        const yamlContent = yaml.dump(comment, {
+            indent: 2,
+            lineWidth: -1,
             quotingType: '"',
             forceQuotes: false,
         });
 
         await fs.promises.writeFile(filePath, yamlContent, 'utf-8');
+
+        // Return relative path for git staging
+        return path.join('discussions', discussionId, filename);
     }
 
     /**
-     * Delete a discussion YAML file
+     * Write a full discussion (metadata + all comments)
+     * Used primarily for creating new discussions with initial comment
+     */
+    async writeDiscussion(discussion: Discussion): Promise<void> {
+        // Write metadata
+        await this.writeDiscussionMeta(discussion);
+
+        // Write each comment to its own file
+        for (const comment of discussion.comments) {
+            await this.writeComment(discussion.id, comment);
+        }
+    }
+
+    /**
+     * Delete a discussion folder and all its contents
      */
     async deleteDiscussion(discussionId: string): Promise<void> {
-        const filePath = this.sidecarService.getDiscussionFilePath(discussionId);
-        if (!filePath) {
+        const discussionFolder = this.sidecarService.getDiscussionFolderPath(discussionId);
+        if (!discussionFolder) {
             throw new Error('Discussion repo not linked');
         }
 
         try {
-            if (fs.existsSync(filePath)) {
-                await fs.promises.unlink(filePath);
+            if (fs.existsSync(discussionFolder)) {
+                await fs.promises.rm(discussionFolder, { recursive: true });
             }
         } catch (error) {
             throw new Error(`Failed to delete discussion: ${error}`);
@@ -114,7 +235,7 @@ export class YamlStorageService {
     }
 
     /**
-     * List all discussion IDs from YAML files
+     * List all discussion IDs from folders
      */
     async listAllDiscussionIds(): Promise<string[]> {
         const discussionsFolder = this.sidecarService.getDiscussionsFolderPath();
@@ -123,10 +244,10 @@ export class YamlStorageService {
         }
 
         try {
-            const files = await fs.promises.readdir(discussionsFolder);
-            return files
-                .filter(f => f.endsWith('.yml'))
-                .map(f => path.basename(f, '.yml'))
+            const entries = await fs.promises.readdir(discussionsFolder, { withFileTypes: true });
+            return entries
+                .filter(e => e.isDirectory())
+                .map(e => e.name)
                 .filter(isValidDiscussionId);
         } catch (error) {
             console.error('Error listing discussions:', error);
@@ -155,11 +276,11 @@ export class YamlStorageService {
      * Check if a discussion ID already exists
      */
     async discussionExists(discussionId: string): Promise<boolean> {
-        const filePath = this.sidecarService.getDiscussionFilePath(discussionId);
-        if (!filePath) {
+        const discussionFolder = this.sidecarService.getDiscussionFolderPath(discussionId);
+        if (!discussionFolder) {
             return false;
         }
-        return fs.existsSync(filePath);
+        return fs.existsSync(discussionFolder);
     }
 
     /**
@@ -184,7 +305,7 @@ export class YamlStorageService {
     }
 
     /**
-     * Open a discussion YAML file in the editor
+     * Open a discussion's _meta.yml file in the editor
      */
     async openDiscussionFile(discussionId: string): Promise<void> {
         const filePath = this.sidecarService.getDiscussionFilePath(discussionId);
