@@ -37,6 +37,9 @@ export async function activate(context: vscode.ExtensionContext) {
     yamlStorage = new YamlStorageService(sidecarService);
     anchorIndexer = new AnchorIndexer(sidecarService);
     readMentionsStorage = new ReadMentionsStorage();
+    
+    // Initialize read mentions storage with extension context (uses workspaceState)
+    readMentionsStorage.initialize(context);
 
     // Initialize providers
     treeDataProvider = new DiscussionsTreeDataProvider(yamlStorage, anchorIndexer, sidecarService, gitService, readMentionsStorage);
@@ -147,6 +150,40 @@ export async function activate(context: vscode.ExtensionContext) {
             await commandHandlers.markAllMentionsRead(item?.discussion);
             await webviewProvider.refresh();
         }),
+        vscode.commands.registerCommand('longLivedDiscussions.openDiscussionFromAnchor', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showWarningMessage('No active editor.');
+                return;
+            }
+
+            // Get the current line text
+            const line = editor.document.lineAt(editor.selection.active.line);
+            const lineText = line.text;
+
+            // Look for [discussion:d-XXXXXXXX] pattern
+            const match = lineText.match(/\[discussion:(d-[a-f0-9]{8})\]/i);
+            if (!match) {
+                vscode.window.showWarningMessage('No discussion anchor found on this line.');
+                return;
+            }
+
+            const discussionId = match[1];
+            
+            // Find the discussion
+            const discussion = treeDataProvider.getDiscussion(discussionId);
+            if (!discussion) {
+                vscode.window.showWarningMessage(`Discussion ${discussionId} not found. Try refreshing.`);
+                return;
+            }
+
+            // Focus the sidebar
+            await vscode.commands.executeCommand('longLivedDiscussionsView.focus');
+
+            // Create a tree item and reveal it
+            const treeItem = treeDataProvider.getTreeItemForDiscussion(discussion);
+            await treeView.reveal(treeItem, { select: true, focus: true, expand: true });
+        }),
     );
 
     // Refresh views when sync brings new data from remote
@@ -207,9 +244,6 @@ async function initializeExtension(): Promise<void> {
         
         // Initialize YAML storage
         await yamlStorage.initialize();
-        
-        // Initialize read mentions storage (stored in code repo's .vscode folder)
-        await readMentionsStorage.initialize(status.codeRepoPath!);
         
         // Scan for anchors
         await anchorIndexer.scanWorkspace();

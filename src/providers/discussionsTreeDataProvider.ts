@@ -243,6 +243,57 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
         return element;
     }
 
+    getParent(element: DiscussionTreeItem): DiscussionTreeItem | undefined {
+        // Root items have no parent
+        if (element.itemType === 'root-unread-mentions' || 
+            element.itemType === 'root-anchored' || 
+            element.itemType === 'root-unanchored') {
+            return undefined;
+        }
+
+        // Discussion items - find their parent based on where they appear
+        if (element.itemType === 'discussion' && element.discussion) {
+            const d = element.discussion;
+            
+            // Check if this is an unanchored discussion
+            if (!d.isAnchored) {
+                return new DiscussionTreeItem(
+                    'root-unanchored',
+                    'Unanchored / Historical',
+                    vscode.TreeItemCollapsibleState.Collapsed
+                );
+            }
+
+            // Check if this discussion has unread mentions (could be in that category)
+            if (this.hasUnreadMentionFor(d)) {
+                // Could be in either Unread Mentions or Files category
+                // For reveal, we'll use the Files category as the primary parent
+            }
+
+            // Anchored discussion - parent is the file item
+            const relativePath = d.currentAnchor?.relativePath || d.anchor.file_path;
+            const absolutePath = this.sidecarService.getAbsolutePath(relativePath);
+            return new DiscussionTreeItem(
+                'file',
+                relativePath,
+                vscode.TreeItemCollapsibleState.Expanded,
+                undefined,
+                absolutePath || undefined,
+            );
+        }
+
+        // File items - parent is root-anchored
+        if (element.itemType === 'file') {
+            return new DiscussionTreeItem(
+                'root-anchored',
+                'Files with Discussions',
+                vscode.TreeItemCollapsibleState.Expanded
+            );
+        }
+
+        return undefined;
+    }
+
     async getChildren(element?: DiscussionTreeItem): Promise<DiscussionTreeItem[]> {
         if (!this.sidecarService.isLinked) {
             return [];
@@ -420,6 +471,22 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
      */
     getDiscussion(discussionId: string): DiscussionWithAnchorStatus | undefined {
         return this.discussions.find(d => d.id === discussionId);
+    }
+
+    /**
+     * Create a tree item for a discussion (used for revealing in tree view)
+     */
+    getTreeItemForDiscussion(discussion: DiscussionWithAnchorStatus): DiscussionTreeItem {
+        const hasUnreadMention = this.hasUnreadMentionFor(discussion);
+        return new DiscussionTreeItem(
+            'discussion',
+            discussion.title,
+            vscode.TreeItemCollapsibleState.None,
+            discussion,
+            undefined,
+            undefined,
+            hasUnreadMention,
+        );
     }
 
     dispose(): void {

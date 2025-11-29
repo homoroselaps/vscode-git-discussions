@@ -102,6 +102,12 @@
         "title": "Mark All Mentions as Read",
         "category": "Discussions",
         "icon": "$(bell-slash)"
+      },
+      {
+        "command": "longLivedDiscussions.openDiscussionFromAnchor",
+        "title": "Open Discussion from Anchor",
+        "category": "Discussions",
+        "icon": "$(comment-discussion)"
       }
     ],
     "menus": {
@@ -182,6 +188,10 @@
       "editor/context": [
         {
           "command": "longLivedDiscussions.createDiscussion",
+          "group": "discussions"
+        },
+        {
+          "command": "longLivedDiscussions.openDiscussionFromAnchor",
           "group": "discussions"
         }
       ],
