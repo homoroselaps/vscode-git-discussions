@@ -9,10 +9,12 @@ A VS Code extension that lets developers create persistent, threaded discussions
 ### 📍 **Discussion Anchors**
 - Anchor discussions to specific lines with special comment markers: `// [discussion:d-3f9a7c2b]`
 - Language-aware comment syntax (supports `//`, `#`, `--`, etc.)
+- Smart indentation matching when inserting anchors
 - Navigate instantly from sidebar to code location
 
 ### 🗂️ **Sidecar Repository Storage**
 - Discussions stored as individual YAML files in a separate Git repo
+- Conflict-free structure: each comment is a separate file
 - No commits in your main code repository
 - Easy to version, review, and collaborate on discussions
 
@@ -20,6 +22,7 @@ A VS Code extension that lets developers create persistent, threaded discussions
 - Dedicated "Discussions" activity bar icon
 - Tree view organized by file → discussions
 - "Unanchored / Historical" group for orphaned discussions
+- Toggle to show/hide closed discussions (eye icon)
 - Click to navigate to code or view discussion details
 
 ### 💬 **Full Discussion Workflow**
@@ -27,6 +30,39 @@ A VS Code extension that lets developers create persistent, threaded discussions
 - Add comments to existing discussions
 - Close discussions and optionally remove anchors
 - Auto-commit discussion changes to sidecar repo
+
+### 🔔 **@Mentions & Notifications**
+- Mention teammates with `@name` syntax in comments
+- Unread mention badge on the Discussions panel
+- Bell icon on comments with unread mentions
+- Mark mentions as read individually or all at once
+- Fuzzy matching for names (e.g., `@jt` matches "Jahn-Torben")
+
+### 🔗 **Links in Comments**
+- URLs are automatically detected and rendered as clickable links
+- Supports `http://`, `https://`, and `www.` URLs
+- Links open in your default browser
+
+### 🕰️ **Historical Context Recovery**
+- Stores uncommitted file state when creating discussions
+- "Open Context" button reconstructs the file as it was when the discussion was created
+- Works even for unanchored discussions where the anchor was removed
+- Supports both tracked files with changes and brand new untracked files
+
+When a discussion is created, the extension captures:
+1. **commit_sha** - The HEAD commit at creation time
+2. **uncommitted_diff** - Any uncommitted changes to the file (unified diff format)
+
+For unanchored discussions, "Open Context" reconstructs the original file by:
+1. Retrieving the file content at `commit_sha` via `git show`
+2. Applying the stored `uncommitted_diff` patch
+3. Opening the result in an ephemeral editor tab at the original anchor line
+
+### 🎨 **Modern Chat UI**
+- Clean Preact-based webview for viewing discussions
+- Auto-expanding comment input box
+- Icon buttons using VS Code's codicon library
+- Copy discussion ID for easy reference in other documents
 
 ## 🚀 Quick Start
 
@@ -136,9 +172,20 @@ With these settings, you'll need to manually run `git push` and `git pull` in th
 
 ## 📁 Data Storage
 
-### Discussion YAML Schema
+### Discussion Folder Structure
 
-Each discussion is stored as `discussions/<id>.yml`:
+Each discussion is stored as a folder with separate files to prevent merge conflicts:
+
+```
+discussions/
+└── d-3f9a7c2b/
+    ├── _meta.yml           # Discussion metadata
+    ├── c-a1b2c3d4.yml      # Comment 1
+    ├── c-e5f6g7h8.yml      # Comment 2
+    └── ...
+```
+
+### Meta File Schema (`_meta.yml`)
 
 ```yaml
 id: "d-3f9a7c2b"
@@ -152,23 +199,26 @@ anchor:
   end_line: 42
   language: "typescript"
   anchor_line: 41
+  uncommitted_diff: |    # Optional: file diff when discussion was created
+    diff --git a/src/foo.ts b/src/foo.ts
+    ...
 
 metadata:
   created_by: "jtm"
   created_at: "2025-11-29T12:34:56Z"
+```
 
-comments:
-  - id: 1
-    author: "jtm"
-    created_at: "2025-11-29T12:34:56Z"
-    body: |
-      This algorithm needs review for negative values.
+### Comment File Schema (`c-XXXXXXXX.yml`)
 
-  - id: 2
-    author: "alice"
-    created_at: "2025-11-29T13:00:00Z"
-    body: |
-      Good catch! Added a guard clause.
+```yaml
+id: "c-a1b2c3d4"
+author: "jtm"
+created_at: "2025-11-29T12:34:56Z"
+body: |
+  This algorithm needs review for negative values.
+  Check out https://example.com/docs for more info.
+  
+  @alice can you take a look?
 ```
 
 ### Anchor Format
@@ -196,26 +246,43 @@ Anchors are language-aware comments containing a discussion ID:
 
 ```
 src/
-├── extension.ts              # Extension entry point
+├── extension.ts                  # Extension entry point
 ├── models/
-│   └── discussion.ts         # Data models & utilities
+│   └── discussion.ts             # Data models & utilities
 ├── services/
-│   ├── sidecarRepoService.ts # Sidecar repo detection
-│   ├── gitService.ts         # Git operations
-│   ├── yamlStorageService.ts # YAML file I/O
-│   └── anchorIndexer.ts      # Anchor scanning
+│   ├── sidecarRepoService.ts     # Sidecar repo detection
+│   ├── gitService.ts             # Git operations (incl. diff/reconstruction)
+│   ├── yamlStorageService.ts     # YAML file I/O
+│   ├── anchorIndexer.ts          # Anchor scanning
+│   └── readMentionsStorage.ts    # Local storage for read mentions
 ├── providers/
-│   └── discussionsTreeDataProvider.ts # Sidebar tree view
-└── commands/
-    └── commandHandlers.ts    # Command implementations
+│   ├── discussionsTreeDataProvider.ts  # Sidebar tree view
+│   └── discussionWebviewProvider.ts    # Chat panel webview
+├── commands/
+│   └── commandHandlers.ts        # Command implementations
+└── webview/                      # Preact-based chat UI
+    ├── main.tsx                  # Webview entry point
+    ├── components/               # React components
+    │   ├── App.tsx
+    │   ├── Header.tsx
+    │   ├── CommentList.tsx
+    │   ├── Comment.tsx
+    │   ├── InputArea.tsx
+    │   └── EmptyState.tsx
+    ├── styles/
+    │   └── main.css              # VS Code themed styles
+    └── utils/
+        └── mentions.ts           # @mention & link formatting
 ```
 
 ### Building
 
 ```bash
 npm install
-npm run compile
-npm run watch  # For development
+npm run compile           # Build extension TypeScript
+npm run compile:webview   # Build Preact webview
+npm run watch             # Watch mode for development
+npm run watch:webview     # Watch mode for webview
 ```
 
 ### Testing
