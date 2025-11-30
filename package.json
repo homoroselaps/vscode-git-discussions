@@ -1,8 +1,9 @@
 {
-  "name": "long-lived-discussions",
-  "displayName": "Long-Lived Git Discussions",
+  "name": "vscode-git-discussions",
+  "displayName": "VS-Code Git Discussions",
   "description": "Anchor long-lived discussions to code and store them in a separate sidecar Git repository",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "license": "MIT",
   "publisher": "jtm",
   "engines": {
     "vscode": "^1.106.1"
