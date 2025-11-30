@@ -117,8 +117,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 await webviewProvider.showDiscussion(discussion);
             }
         }),
-        vscode.commands.registerCommand('longLivedDiscussions.goToAnchor', (item) => 
-            commandHandlers.goToAnchor(item?.discussion)
+        vscode.commands.registerCommand('longLivedDiscussions.openContext', (item) => 
+            commandHandlers.openContext(item?.discussion)
         ),
         vscode.commands.registerCommand('longLivedDiscussions.openYamlFile', (item) => 
             commandHandlers.openYamlFile(item?.discussion)

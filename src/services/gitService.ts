@@ -421,6 +421,193 @@ export class GitService {
         await this.push();
     }
 
+    /**
+     * Get the uncommitted diff for a specific file in the code repo.
+     * Returns the diff of working tree vs HEAD.
+     * For new (untracked) files, returns a diff that creates the entire file.
+     * Returns undefined if no changes or file doesn't exist.
+     */
+    async getFileDiff(relativePath: string): Promise<string | undefined> {
+        if (!this.codeRepoPath) {
+            return undefined;
+        }
+
+        try {
+            // First, check if file is tracked
+            const isTracked = await this.isFileTracked(relativePath);
+            
+            if (isTracked) {
+                // Get diff of working tree vs HEAD for this specific file
+                const result = await execAsync(
+                    `git diff HEAD -- "${relativePath}"`, 
+                    { cwd: this.codeRepoPath, maxBuffer: 10 * 1024 * 1024 }
+                );
+                const diff = result.stdout.trim();
+                return diff.length > 0 ? diff : undefined;
+            } else {
+                // For untracked files, create a diff that represents adding the whole file
+                // Use git diff with /dev/null to create a proper unified diff
+                const result = await execAsync(
+                    `git diff --no-index /dev/null "${relativePath}" || true`,
+                    { cwd: this.codeRepoPath, maxBuffer: 10 * 1024 * 1024 }
+                );
+                const diff = result.stdout.trim();
+                return diff.length > 0 ? diff : undefined;
+            }
+        } catch (error) {
+            console.error(`Failed to get diff for ${relativePath}:`, error);
+            return undefined;
+        }
+    }
+
+    /**
+     * Check if a file is tracked by git
+     */
+    private async isFileTracked(relativePath: string): Promise<boolean> {
+        if (!this.codeRepoPath) {
+            return false;
+        }
+        try {
+            await execAsync(
+                `git ls-files --error-unmatch "${relativePath}"`,
+                { cwd: this.codeRepoPath }
+            );
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Get file content at a specific commit.
+     * Returns undefined if file doesn't exist at that commit.
+     */
+    async getFileAtCommit(relativePath: string, commitSha: string): Promise<string | undefined> {
+        if (!this.codeRepoPath) {
+            return undefined;
+        }
+
+        try {
+            const result = await execAsync(
+                `git show "${commitSha}:${relativePath}"`,
+                { cwd: this.codeRepoPath, maxBuffer: 10 * 1024 * 1024 }
+            );
+            return result.stdout;
+        } catch (error) {
+            // File might not exist at that commit
+            console.error(`Failed to get file at commit ${commitSha}:`, error);
+            return undefined;
+        }
+    }
+
+    /**
+     * Reconstruct file content by applying a diff to file content at a specific commit.
+     * This allows recreating the exact file state when a discussion was created,
+     * even if those changes were never committed or committed differently.
+     * 
+     * @param relativePath - Relative path to the file
+     * @param commitSha - The commit SHA to start from
+     * @param diff - The diff to apply (optional, if undefined returns file at commit)
+     * @returns The reconstructed file content, or undefined if reconstruction fails
+     */
+    async reconstructFileContent(
+        relativePath: string, 
+        commitSha: string, 
+        diff?: string
+    ): Promise<string | undefined> {
+        if (!this.codeRepoPath) {
+            return undefined;
+        }
+
+        // Get file at the commit
+        const baseContent = await this.getFileAtCommit(relativePath, commitSha);
+        
+        // If file doesn't exist at the commit and we have a diff, 
+        // it was a new file - apply diff to empty content
+        if (baseContent === undefined) {
+            if (diff) {
+                // New file case: apply diff to empty string
+                return this.applyUnifiedDiff('', diff);
+            }
+            // No diff and file doesn't exist - can't reconstruct
+            return undefined;
+        }
+
+        // If no diff, return base content
+        if (!diff) {
+            return baseContent;
+        }
+
+        // Apply the diff using a simple unified diff parser
+        return this.applyUnifiedDiff(baseContent, diff);
+    }
+
+    /**
+     * Apply a unified diff to content.
+     * This is a simple implementation that handles standard unified diff format.
+     */
+    private applyUnifiedDiff(content: string, diff: string): string {
+        const lines = content.split('\n');
+        const diffLines = diff.split('\n');
+        
+        // Parse hunks from the diff
+        const hunks: Array<{
+            oldStart: number;
+            oldCount: number;
+            changes: string[];
+        }> = [];
+
+        let currentHunk: typeof hunks[0] | null = null;
+
+        for (const line of diffLines) {
+            // Match hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+            const hunkMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+            if (hunkMatch) {
+                if (currentHunk) {
+                    hunks.push(currentHunk);
+                }
+                currentHunk = {
+                    oldStart: parseInt(hunkMatch[1], 10),
+                    oldCount: parseInt(hunkMatch[2] || '1', 10),
+                    changes: [],
+                };
+                continue;
+            }
+
+            if (currentHunk && (line.startsWith('+') || line.startsWith('-') || line.startsWith(' '))) {
+                currentHunk.changes.push(line);
+            }
+        }
+
+        if (currentHunk) {
+            hunks.push(currentHunk);
+        }
+
+        // Apply hunks in reverse order to preserve line numbers
+        const result = [...lines];
+        for (const hunk of hunks.reverse()) {
+            const startIndex = hunk.oldStart - 1; // Convert to 0-based
+            let removeCount = 0;
+            const insertLines: string[] = [];
+
+            for (const change of hunk.changes) {
+                if (change.startsWith('-')) {
+                    removeCount++;
+                } else if (change.startsWith('+')) {
+                    insertLines.push(change.substring(1));
+                } else if (change.startsWith(' ')) {
+                    // Context line - include in insert, count as remove from old
+                    insertLines.push(change.substring(1));
+                    removeCount++;
+                }
+            }
+
+            result.splice(startIndex, removeCount, ...insertLines);
+        }
+
+        return result.join('\n');
+    }
+
     dispose(): void {
         this.stopPeriodicSync();
         this._onDidSync.dispose();

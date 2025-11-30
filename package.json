@@ -76,8 +76,8 @@
         "category": "Discussions"
       },
       {
-        "command": "longLivedDiscussions.goToAnchor",
-        "title": "Go to Anchor in Code",
+        "command": "longLivedDiscussions.openContext",
+        "title": "Open Context",
         "category": "Discussions",
         "icon": "$(go-to-file)"
       },
@@ -159,12 +159,12 @@
           "group": "inline"
         },
         {
-          "command": "longLivedDiscussions.goToAnchor",
+          "command": "longLivedDiscussions.openContext",
           "when": "view == longLivedDiscussionsView && viewItem == discussion",
           "group": "inline"
         },
         {
-          "command": "longLivedDiscussions.goToAnchor",
+          "command": "longLivedDiscussions.openContext",
           "when": "view == longLivedDiscussionsView && viewItem == discussionWithMention",
           "group": "inline"
         },

@@ -41,6 +41,8 @@ export interface Anchor {
     symbol_path: string | null;
     /** Line number where the [discussion:id] comment is (1-based) */
     anchor_line: number;
+    /** Uncommitted diff at time of creation (if file had uncommitted changes) */
+    uncommitted_diff?: string;
 }
 
 /**

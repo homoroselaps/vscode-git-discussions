@@ -76,30 +76,41 @@ export class CommandHandlers {
             const codeRepoUrl = await this.gitService.getCodeRepoRemoteUrl();
             const discussionRepoUrl = await this.gitService.getDiscussionRepoRemoteUrl();
 
+            // Get relative path for the file
+            const relativePath = this.sidecarService.getRelativePath(editor.document.uri.fsPath);
+
             // Create anchor comment
             const languageId = editor.document.languageId;
             const anchorComment = formatAnchorComment(languageId, discussionId);
             
-            // Insert anchor comment above the selection
+            // Insert anchor comment above the selection, matching indentation
             const insertLine = selection.start.line;
+            const lineText = editor.document.lineAt(insertLine).text;
+            const indentMatch = lineText.match(/^(\s*)/);
+            const indent = indentMatch ? indentMatch[1] : '';
             const insertPosition = new vscode.Position(insertLine, 0);
             
             await editor.edit(editBuilder => {
-                editBuilder.insert(insertPosition, anchorComment + '\n');
+                editBuilder.insert(insertPosition, indent + anchorComment + '\n');
             });
 
             // Save the file
             await editor.document.save();
 
-            // Create anchor info
+            // Capture uncommitted diff AFTER anchor is inserted
+            // This way "Open Context" shows the file exactly as it was with the anchor present
+            const uncommittedDiff = await this.gitService.getFileDiff(relativePath);
+
+            // Create anchor info (including uncommitted diff if present)
             const anchor: Anchor = {
                 commit_sha: commitSha,
-                file_path: this.sidecarService.getRelativePath(editor.document.uri.fsPath),
+                file_path: relativePath,
                 start_line: startLine,
                 end_line: endLine,
                 language: languageId,
                 symbol_path: null,
                 anchor_line: insertLine + 1, // 1-based
+                ...(uncommittedDiff && { uncommitted_diff: uncommittedDiff }),
             };
 
             // Create discussion
@@ -348,7 +359,7 @@ export class CommandHandlers {
 
         if (discussion.isAnchored && discussion.currentAnchor) {
             // Navigate to anchor in code
-            await this.goToAnchor(discussion);
+            await this.openContext(discussion);
         } else {
             // Open YAML file for unanchored discussions
             await this.openYamlFile(discussion);
@@ -356,38 +367,129 @@ export class CommandHandlers {
     }
 
     /**
-     * Navigate to the anchor location in code
+     * Open the context for a discussion.
+     * - If anchored: navigate to the anchor location in the current file
+     * - If unanchored: reconstruct the file state from commit + diff and open in ephemeral tab
      */
-    async goToAnchor(discussion?: DiscussionWithAnchorStatus): Promise<void> {
+    async openContext(discussion?: DiscussionWithAnchorStatus): Promise<void> {
         if (!discussion) {
             return;
         }
 
-        const anchor = discussion.currentAnchor;
+        // If anchored, navigate to current anchor position
+        if (discussion.isAnchored && discussion.currentAnchor) {
+            try {
+                const anchor = discussion.currentAnchor;
+                const absolutePath = this.sidecarService.getAbsolutePath(anchor.relativePath);
+                if (!absolutePath) {
+                    throw new Error('Could not resolve file path');
+                }
+
+                const uri = vscode.Uri.file(absolutePath);
+                const document = await vscode.workspace.openTextDocument(uri);
+                const editor = await vscode.window.showTextDocument(document);
+
+                // Navigate to the anchor line
+                const line = anchor.line - 1; // 0-based
+                const range = new vscode.Range(line, 0, line, 0);
+                editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+                editor.selection = new vscode.Selection(line, 0, line, 0);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to navigate to anchor: ${error}`);
+            }
+            return;
+        }
+
+        // Unanchored: reconstruct file from git commit + optional diff
+        const anchor = discussion.anchor;
         if (!anchor) {
-            vscode.window.showWarningMessage('Discussion has no anchor in code.');
+            vscode.window.showWarningMessage('Discussion has no anchor information.');
             return;
         }
 
         try {
-            const absolutePath = this.sidecarService.getAbsolutePath(anchor.relativePath);
-            if (!absolutePath) {
-                throw new Error('Could not resolve file path');
+            // Reconstruct the file content as it was when the discussion was created
+            const reconstructedContent = await this.gitService.reconstructFileContent(
+                anchor.file_path,
+                anchor.commit_sha,
+                anchor.uncommitted_diff
+            );
+
+            if (!reconstructedContent) {
+                vscode.window.showErrorMessage(
+                    'Could not reconstruct file content. The commit may not exist locally.'
+                );
+                return;
             }
 
-            const uri = vscode.Uri.file(absolutePath);
-            const document = await vscode.workspace.openTextDocument(uri);
-            const editor = await vscode.window.showTextDocument(document);
+            // Create an ephemeral (untitled) document with the reconstructed content
+            // Use the original filename in the title for context
+            const fileName = anchor.file_path.split('/').pop() || 'file';
+            const shortSha = anchor.commit_sha.substring(0, 7);
+            const docTitle = `${fileName} (at ${shortSha})`;
 
-            // Navigate to the anchor line
-            const line = anchor.line - 1; // 0-based
+            // Determine language for syntax highlighting
+            const languageId = anchor.language || this.guessLanguageFromPath(anchor.file_path);
+
+            const doc = await vscode.workspace.openTextDocument({
+                content: reconstructedContent,
+                language: languageId,
+            });
+
+            const editor = await vscode.window.showTextDocument(doc, {
+                preview: true, // Ephemeral/preview tab
+                preserveFocus: false,
+            });
+
+            // Navigate to the original anchor line
+            const line = (anchor.anchor_line || anchor.start_line || 1) - 1; // 0-based
             const range = new vscode.Range(line, 0, line, 0);
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
             editor.selection = new vscode.Selection(line, 0, line, 0);
 
+            vscode.window.showInformationMessage(
+                `Showing file at commit ${shortSha}${anchor.uncommitted_diff ? ' with uncommitted changes' : ''}`
+            );
+
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to navigate to anchor: ${error}`);
+            vscode.window.showErrorMessage(`Failed to open context: ${error}`);
         }
+    }
+
+    /**
+     * Guess language ID from file path extension
+     */
+    private guessLanguageFromPath(filePath: string): string {
+        const ext = filePath.split('.').pop()?.toLowerCase();
+        const extMap: Record<string, string> = {
+            'ts': 'typescript',
+            'tsx': 'typescriptreact',
+            'js': 'javascript',
+            'jsx': 'javascriptreact',
+            'py': 'python',
+            'rb': 'ruby',
+            'go': 'go',
+            'rs': 'rust',
+            'java': 'java',
+            'c': 'c',
+            'cpp': 'cpp',
+            'h': 'c',
+            'hpp': 'cpp',
+            'cs': 'csharp',
+            'json': 'json',
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'md': 'markdown',
+            'html': 'html',
+            'css': 'css',
+            'scss': 'scss',
+            'less': 'less',
+            'sql': 'sql',
+            'sh': 'shellscript',
+            'bash': 'shellscript',
+            'zsh': 'shellscript',
+        };
+        return extMap[ext || ''] || 'plaintext';
     }
 
     /**
