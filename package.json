@@ -298,6 +298,7 @@
     "test": "vscode-test"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.43",
     "@vscode/webview-ui-toolkit": "^1.4.0",
     "esbuild": "^0.27.0",
     "js-yaml": "^4.1.0",

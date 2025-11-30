@@ -1,5 +1,5 @@
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useRef, useEffect } from 'preact/hooks';
 
 interface InputAreaProps {
     disabled: boolean;
@@ -8,12 +8,17 @@ interface InputAreaProps {
 
 export function InputArea({ disabled, onSubmit }: InputAreaProps) {
     const [text, setText] = useState('');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const handleSubmit = () => {
         const trimmed = text.trim();
         if (trimmed) {
             onSubmit(trimmed);
             setText('');
+            // Reset textarea height after submit
+            if (textareaRef.current) {
+                textareaRef.current.style.height = 'auto';
+            }
         }
     };
 
@@ -23,19 +28,36 @@ export function InputArea({ disabled, onSubmit }: InputAreaProps) {
         }
     };
 
+    const handleInput = (e: Event) => {
+        const textarea = e.target as HTMLTextAreaElement;
+        setText(textarea.value);
+        
+        // Auto-expand: reset height then set to scrollHeight
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
+    };
+
     return (
         <div className="input-area">
-            <textarea
-                value={text}
-                onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
-                onKeyDown={handleKeyDown}
-                disabled={disabled}
-                placeholder={disabled ? 'Discussion is closed' : 'Write a comment... (use @name to mention)'}
-                rows={3}
-            />
-            <button onClick={handleSubmit} disabled={disabled || !text.trim()}>
-                Add Comment
-            </button>
+            <div className="input-wrapper">
+                <textarea
+                    ref={textareaRef}
+                    value={text}
+                    onInput={handleInput}
+                    onKeyDown={handleKeyDown}
+                    disabled={disabled}
+                    placeholder={disabled ? 'Discussion is closed' : 'Write a comment... (Ctrl+Enter to send)'}
+                    rows={1}
+                />
+                <button
+                    className="send-button"
+                    onClick={handleSubmit}
+                    disabled={disabled || !text.trim()}
+                    title="Send comment (Ctrl+Enter)"
+                >
+                    <span className="codicon codicon-send" />
+                </button>
+            </div>
         </div>
     );
 }

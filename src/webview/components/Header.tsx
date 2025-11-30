@@ -3,31 +3,47 @@ import { Discussion } from '../types';
 
 interface HeaderProps {
     discussion: Discussion;
-    onGoToAnchor: () => void;
+    onCopyId: () => void;
+    onOpenContext: () => void;
     onCloseDiscussion: () => void;
 }
 
-export function Header({ discussion, onGoToAnchor, onCloseDiscussion }: HeaderProps) {
-    const { title, status, anchor, isAnchored } = discussion;
+export function Header({ discussion, onCopyId, onOpenContext, onCloseDiscussion }: HeaderProps) {
+    const { title, status, anchor } = discussion;
 
     return (
         <div className="header">
             <h2>{title}</h2>
-            <div className="meta">
-                <span className={`status ${status}`}>{status}</span>
-                <span> • {anchor.file_path}:{anchor.start_line}</span>
-            </div>
-            <div className="actions">
-                {isAnchored && (
-                    <button onClick={onGoToAnchor} title="Go to anchor in code">
-                        📍 Go to Code
+            <div className="sub-header">
+                <div className="meta">
+                    <span className={`status ${status}`}>{status}</span>
+                    <span className="location">{anchor.file_path}:{anchor.start_line}</span>
+                </div>
+                <div className="icon-actions">
+                    <button
+                        className="icon-button"
+                        onClick={onCopyId}
+                        title="Copy discussion ID"
+                    >
+                        <span className="codicon codicon-copy" />
                     </button>
-                )}
-                {status !== 'closed' && (
-                    <button onClick={onCloseDiscussion} title="Close this discussion">
-                        ✓ Close
+                    <button
+                        className="icon-button"
+                        onClick={onOpenContext}
+                        title="Open context"
+                    >
+                        <span className="codicon codicon-go-to-file" />
                     </button>
-                )}
+                    {status !== 'closed' && (
+                        <button
+                            className="icon-button"
+                            onClick={onCloseDiscussion}
+                            title="Close discussion"
+                        >
+                            <span className="codicon codicon-check" />
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -37,7 +37,7 @@ export function Comment({ comment, currentUserName, readCommentIds, onMarkRead }
                             onClick={handleBellClick}
                             title="Click to mark mention as read"
                         >
-                            🔔
+                            <span className="codicon codicon-bell" />
                         </span>
                     )}
                 </span>

@@ -33,9 +33,12 @@ body {
 }
 
 .empty-state .icon {
-    font-size: 48px;
     margin-bottom: 10px;
     opacity: 0.5;
+}
+
+.empty-state .icon .codicon {
+    font-size: 48px;
 }
 
 .container {
@@ -58,9 +61,27 @@ body {
     word-break: break-word;
 }
 
+.header .sub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .header .meta {
     font-size: 11px;
     color: var(--vscode-descriptionForeground);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.header .meta .location {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .header .status {
@@ -80,6 +101,40 @@ body {
 .header .status.closed {
     background-color: var(--vscode-descriptionForeground);
     color: white;
+}
+
+.icon-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.icon-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.icon-button:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
+    opacity: 1;
+}
+
+.icon-button:active {
+    background-color: var(--vscode-toolbar-activeBackground);
+}
+
+.icon-button .codicon {
+    font-size: 14px;
 }
 
 .actions {
@@ -170,6 +225,17 @@ body {
     font-weight: 600;
 }
 
+.link {
+    color: var(--vscode-textLink-foreground);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.link:hover {
+    color: var(--vscode-textLink-activeForeground);
+    text-decoration: underline;
+}
+
 /* Input area styles */
 .input-area {
     padding: 10px 12px;
@@ -177,28 +243,47 @@ body {
     background-color: var(--vscode-sideBarSectionHeader-background);
 }
 
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+}
+
 .input-area textarea {
     width: 100%;
-    min-height: 60px;
-    max-height: 120px;
-    padding: 8px;
+    min-height: 28px;
+    max-height: 150px;
+    padding: 6px 36px 6px 8px;
     font-family: var(--vscode-font-family);
     font-size: 12px;
+    line-height: 1.4;
     background-color: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
     border: 1px solid var(--vscode-input-border);
-    border-radius: 3px;
-    resize: vertical;
+    border-radius: 4px;
+    resize: none;
+    overflow-y: auto;
 }
 
 .input-area textarea:focus {
-    outline: 1px solid var(--vscode-focusBorder);
+    outline: none;
+    border-color: var(--vscode-focusBorder);
 }
 
-.input-area button {
-    margin-top: 8px;
-    padding: 6px 14px;
-    font-size: 12px;
+.input-area textarea::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+}
+
+.input-area .send-button {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: none;
@@ -206,11 +291,16 @@ body {
     cursor: pointer;
 }
 
-.input-area button:hover {
+.input-area .send-button:hover {
     background-color: var(--vscode-button-hoverBackground);
 }
 
-.input-area button:disabled {
-    opacity: 0.5;
+.input-area .send-button:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
+    background-color: var(--vscode-button-secondaryBackground);
+}
+
+.input-area .send-button .codicon {
+    font-size: 14px;
 }

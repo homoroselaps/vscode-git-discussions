@@ -58,8 +58,11 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                 case 'addComment':
                     await this._addComment(data.text);
                     break;
-                case 'goToAnchor':
-                    await this._goToAnchor();
+                case 'copyId':
+                    await this._copyId();
+                    break;
+                case 'openContext':
+                    await this._openContext();
                     break;
                 case 'closeDiscussion':
                     await this._closeDiscussion();
@@ -69,6 +72,9 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'markAllMentionsRead':
                     await this._markAllMentionsRead();
+                    break;
+                case 'openLink':
+                    await this._openLink(data.url);
                     break;
             }
         });
@@ -227,13 +233,28 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _goToAnchor() {
-        if (!this._currentDiscussion?.currentAnchor) {
-            vscode.window.showWarningMessage('Discussion has no anchor in code.');
+    private async _copyId() {
+        if (!this._currentDiscussion) {
             return;
         }
 
-        vscode.commands.executeCommand('longLivedDiscussions.goToAnchor', {
+        const anchorText = `[discussion:${this._currentDiscussion.id}]`;
+        await vscode.env.clipboard.writeText(anchorText);
+        vscode.window.showInformationMessage(`Copied: ${anchorText}`);
+    }
+
+    private async _openLink(url: string) {
+        if (url) {
+            await vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+    }
+
+    private async _openContext() {
+        if (!this._currentDiscussion) {
+            return;
+        }
+
+        vscode.commands.executeCommand('longLivedDiscussions.openContext', {
             discussion: this._currentDiscussion,
         });
     }
@@ -256,6 +277,9 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
         const styleUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'out', 'webview', 'webview.css')
         );
+        const codiconsUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css')
+        );
 
         // Use a nonce for Content Security Policy
         const nonce = getNonce();
@@ -265,7 +289,8 @@ export class DiscussionWebviewProvider implements vscode.WebviewViewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+    <link href="${codiconsUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
     <title>Discussion</title>
 </head>

@@ -33,8 +33,12 @@ export function App({ vscode }: AppProps) {
         vscode.postMessage({ type: 'addComment', text });
     };
 
-    const handleGoToAnchor = () => {
-        vscode.postMessage({ type: 'goToAnchor' });
+    const handleCopyId = () => {
+        vscode.postMessage({ type: 'copyId' });
+    };
+
+    const handleOpenContext = () => {
+        vscode.postMessage({ type: 'openContext' });
     };
 
     const handleCloseDiscussion = () => {
@@ -57,7 +61,8 @@ export function App({ vscode }: AppProps) {
         <div className="container">
             <Header
                 discussion={discussion}
-                onGoToAnchor={handleGoToAnchor}
+                onCopyId={handleCopyId}
+                onOpenContext={handleOpenContext}
                 onCloseDiscussion={handleCloseDiscussion}
             />
             <CommentList

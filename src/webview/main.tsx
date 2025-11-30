@@ -11,5 +11,15 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 
+// Handle link clicks - open in external browser
+document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest('a');
+    if (anchor && anchor.href) {
+        e.preventDefault();
+        vscode.postMessage({ type: 'openLink', url: anchor.href });
+    }
+});
+
 // Render the app
 render(<App vscode={vscode} />, document.getElementById('root')!);
