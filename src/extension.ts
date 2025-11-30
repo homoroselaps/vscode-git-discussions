@@ -184,7 +184,20 @@ export async function activate(context: vscode.ExtensionContext) {
             const treeItem = treeDataProvider.getTreeItemForDiscussion(discussion);
             await treeView.reveal(treeItem, { select: true, focus: true, expand: true });
         }),
+        vscode.commands.registerCommand('longLivedDiscussions.toggleShowClosed', () => {
+            treeDataProvider.toggleShowClosed();
+            // Update the icon based on the new state
+            vscode.commands.executeCommand('setContext', 'longLivedDiscussions.showingClosed', treeDataProvider.showClosedDiscussions);
+        }),
+        vscode.commands.registerCommand('longLivedDiscussions.toggleShowClosedOff', () => {
+            treeDataProvider.toggleShowClosed();
+            // Update the icon based on the new state
+            vscode.commands.executeCommand('setContext', 'longLivedDiscussions.showingClosed', treeDataProvider.showClosedDiscussions);
+        }),
     );
+
+    // Set initial context for toggle icon
+    vscode.commands.executeCommand('setContext', 'longLivedDiscussions.showingClosed', treeDataProvider.showClosedDiscussions);
 
     // Refresh views when sync brings new data from remote
     context.subscriptions.push(

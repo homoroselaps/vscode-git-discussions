@@ -132,6 +132,7 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
 
     private discussions: DiscussionWithAnchorStatus[] = [];
     private currentUserName: string = '';
+    private _showClosedDiscussions: boolean = false;
 
     constructor(
         private yamlStorage: YamlStorageService,
@@ -155,6 +156,31 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
     private async loadCurrentUser(): Promise<void> {
         const user = await this.gitService.getCurrentUser();
         this.currentUserName = user.name;
+    }
+
+    /**
+     * Get whether closed discussions are shown
+     */
+    get showClosedDiscussions(): boolean {
+        return this._showClosedDiscussions;
+    }
+
+    /**
+     * Toggle visibility of closed discussions
+     */
+    toggleShowClosed(): void {
+        this._showClosedDiscussions = !this._showClosedDiscussions;
+        this._onDidChangeTreeData.fire();
+    }
+
+    /**
+     * Get filtered discussions based on show closed setting
+     */
+    private getFilteredDiscussions(): DiscussionWithAnchorStatus[] {
+        if (this._showClosedDiscussions) {
+            return this.discussions;
+        }
+        return this.discussions.filter(d => d.status !== 'closed');
     }
 
     /**
@@ -205,7 +231,7 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
         if (!this.currentUserName) {
             return [];
         }
-        return this.discussions.filter(d => this.hasUnreadMentionFor(d));
+        return this.getFilteredDiscussions().filter(d => this.hasUnreadMentionFor(d));
     }
 
     /**
@@ -376,7 +402,7 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
      * Get file items for anchored discussions
      */
     private getAnchoredFileItems(): DiscussionTreeItem[] {
-        const anchored = this.discussions.filter(d => d.isAnchored);
+        const anchored = this.getFilteredDiscussions().filter(d => d.isAnchored);
         
         // Group by file
         const byFile = new Map<string, DiscussionWithAnchorStatus[]>();
@@ -412,7 +438,7 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
     private getDiscussionsForFile(absolutePath: string): DiscussionTreeItem[] {
         const relativePath = this.sidecarService.getRelativePath(absolutePath);
         
-        const discussions = this.discussions.filter(d => {
+        const discussions = this.getFilteredDiscussions().filter(d => {
             const dPath = d.currentAnchor?.relativePath || d.anchor.file_path;
             return dPath === relativePath;
         });
@@ -442,7 +468,7 @@ export class DiscussionsTreeDataProvider implements vscode.TreeDataProvider<Disc
      * Get unanchored/historical discussion items
      */
     private getUnanchoredItems(): DiscussionTreeItem[] {
-        const unanchored = this.discussions.filter(d => !d.isAnchored);
+        const unanchored = this.getFilteredDiscussions().filter(d => !d.isAnchored);
         
         return unanchored.map(d => {
             const hasUnreadMention = this.hasUnreadMentionFor(d);

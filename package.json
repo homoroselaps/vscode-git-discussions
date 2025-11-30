@@ -108,19 +108,41 @@
         "title": "Open Discussion from Anchor",
         "category": "Discussions",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "longLivedDiscussions.toggleShowClosed",
+        "title": "Hide Closed Discussions",
+        "category": "Discussions",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "longLivedDiscussions.toggleShowClosedOff",
+        "title": "Show Closed Discussions",
+        "category": "Discussions",
+        "icon": "$(eye-closed)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "longLivedDiscussions.toggleShowClosed",
+          "when": "view == longLivedDiscussionsView && longLivedDiscussions.showingClosed",
+          "group": "navigation@1"
+        },
+        {
+          "command": "longLivedDiscussions.toggleShowClosedOff",
+          "when": "view == longLivedDiscussionsView && !longLivedDiscussions.showingClosed",
+          "group": "navigation@1"
+        },
+        {
           "command": "longLivedDiscussions.sync",
           "when": "view == longLivedDiscussionsView",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "longLivedDiscussions.refresh",
           "when": "view == longLivedDiscussionsView",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
