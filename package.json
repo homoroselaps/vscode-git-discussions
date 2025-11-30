@@ -28,12 +28,14 @@
       "longLivedDiscussions": [
         {
           "id": "longLivedDiscussionsView",
-          "name": "Discussions"
+          "name": "Discussions",
+          "icon": "$(comment-discussion)"
         },
         {
           "id": "longLivedDiscussionsChat",
           "name": "Chat",
-          "type": "webview"
+          "type": "webview",
+          "icon": "$(comment)"
         }
       ]
     },
@@ -286,25 +288,33 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run compile:webview",
     "compile": "tsc -p ./",
+    "compile:webview": "vite build --config src/webview/vite.config.ts",
     "watch": "tsc -watch -p ./",
+    "watch:webview": "vite build --config src/webview/vite.config.ts --watch",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "esbuild": "^0.27.0",
+    "js-yaml": "^4.1.0",
+    "lit": "^3.3.1"
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
     "@types/js-yaml": "^4.0.9",
-    "@types/vscode": "^1.106.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.46.3",
-    "eslint": "^9.39.1",
-    "typescript": "^5.9.3",
+    "@types/vscode": "^1.106.1",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.1",
+    "preact": "^10.27.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.2.4"
   }
 }
